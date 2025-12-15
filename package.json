@@ -1,0 +1,17 @@
+{
+  "name": "block-factory-blocks",
+  "version": "1.0.0",
+  "description": "A multi-block plugin built with a single build process.",
+  "scripts": {
+    "prebuild": "node generate-block-code-multi.js",
+    "prestart": "node generate-block-code-multi.js",
+    "start": "wp-scripts start --config webpack.config.js",
+    "build": "wp-scripts build --config webpack.config.js"
+  },
+  "devDependencies": {
+    "@wordpress/scripts": "^26.0.0",
+    "copy-webpack-plugin": "^13.0.1",
+    "@wordpress/media-utils": "^5.0.0",
+    "glob": "^10.4.5" 
+  }
+}

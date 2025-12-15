@@ -1,0 +1,40 @@
+{
+    "fields": [
+        {
+            "type": "text",
+            "key": "default_title",
+            "label": "Default Block Title",
+            "default": "Click 'Edit Structure' to define fields."
+        },
+        {
+            "type": "text",
+            "key": "new_field_1",
+            "label": "New text Field",
+            "default": ""
+        },
+        {
+            "type": "number",
+            "key": "new_field_2",
+            "label": "New number Field",
+            "default": ""
+        },
+        {
+            "type": "range",
+            "key": "new_field_3",
+            "label": "New range Field",
+            "default": ""
+        },
+        {
+            "type": "url",
+            "key": "new_field_4",
+            "label": "New url Field",
+            "default": ""
+        },
+        {
+            "type": "contentEditor",
+            "key": "new_field_5",
+            "label": "New contentEditor Field",
+            "default": ""
+        }
+    ]
+}
