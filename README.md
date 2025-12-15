@@ -11,3 +11,7 @@ Version Control: Every front-end and back-end change is trackable, mergeable, an
 Clean Ownership: Easily manage and test block appearance across environments.
 
 Developer Comfort: Work in your preferred IDE using standard HTML, CSS, and PHP, leveraging the field data provided by the framework.
+
+
+
+
