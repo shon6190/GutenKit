@@ -141,3 +141,5 @@ vite.config.ts.timestamp-*
 
 # Temporary folders
 build/
+blocks/
+package-lock.json
