@@ -21,5 +21,8 @@
     "is_html_mode_new_field_5": {
         "type": "boolean",
         "default": false
+    },
+    "new_field_6": {
+        "type": "array"
     }
 }

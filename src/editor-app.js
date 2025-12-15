@@ -30,6 +30,9 @@ const FIELD_TYPES = [
     { label: 'Relational (Post Select)', value: 'relational' }, // Complex, placeholder added
 ];
 
+// --- NEW CODE ADDED HERE (Utility Function) ---
+const slugifyKey = (value) => value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+
 // --- 1. The Main Application Component ---
 const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     // State to hold the array of fields (the component structure)
@@ -102,14 +105,143 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
             });
     };
 
+
+    // --- NEW CODE ADDED HERE (Repeater Renderer) ---
+    const renderRepeaterSettings = (field, fieldIndex, updateFieldProp, removeFieldAtIndex) => {
+        // Initialize the subFields array if it doesn't exist
+        const subFields = field.subFields || [];
+
+        // Function to add a new sub-field to the repeater
+        const addSubField = (type) => {
+            const newSubField = {
+                type: type,
+                key: slugifyKey(`sub_field_${subFields.length}_${type}`),
+                label: `New ${type} Sub-Field`,
+                default: '',
+            };
+            // Update the main field's subFields property
+            updateFieldProp(fieldIndex, 'subFields', [...subFields, newSubField]);
+        };
+
+        // Function to update a sub-field's properties
+        const updateSubField = (subIndex, property, value) => {
+            const newSubFields = subFields.map((subField, i) => {
+                if (i === subIndex) {
+                    // Ensure key is slugified for the sub-field
+                    if (property === 'key') {
+                        value = slugifyKey(value);
+                    }
+                    return { ...subField, [property]: value };
+                }
+                return subField;
+            });
+            updateFieldProp(fieldIndex, 'subFields', newSubFields);
+        };
+
+        // Function to remove a sub-field
+        const removeSubField = (subIndex) => {
+            const newSubFields = subFields.filter((_, i) => i !== subIndex);
+            updateFieldProp(fieldIndex, 'subFields', newSubFields);
+        };
+        
+        // Function to render the settings for an individual sub-field
+        const renderSubFieldSettings = (subField, subIndex) => {
+            return createElement(
+                PanelBody,
+                { title: `${subField.label} (${subField.type})`, initialOpen: false, key: subIndex, className: 'repeater-sub-field-settings' },
+                createElement(TextControl, {
+                    label: "Sub-Field Label",
+                    value: subField.label,
+                    onChange: val => updateSubField(subIndex, 'label', val),
+                }),
+                createElement(TextControl, {
+                    label: "Attribute Key (Variable Name)",
+                    value: subField.key,
+                    help: "Must be unique, lowercase, and contain only letters, numbers, and underscores.",
+                    onChange: val => updateSubField(subIndex, 'key', val),
+                }),
+                createElement(SelectControl, {
+                    label: "Sub-Field Type",
+                    value: subField.type,
+                    options: FIELD_TYPES.map(t => ({ label: t.label, value: t.value })).filter(t => t.value !== 'repeater'),
+                    onChange: val => updateSubField(subIndex, 'type', val),
+                }),
+                createElement(Button, { 
+                    isDestructive: true, 
+                    onClick: () => removeSubField(subIndex),
+                    style: { marginTop: '10px' }
+                }, 'Delete Sub-Field')
+            );
+        };
+
+        return createElement(
+            PanelBody,
+            { title: 'Repeater Sub-Fields', initialOpen: true },
+            
+            // 1. Add New Sub-Field Palette
+            createElement('h4', null, 'Add New Sub-Field'),
+            createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '15px' } },
+                FIELD_TYPES.filter(t => t.value !== 'repeater' && t.value !== 'relational').map(type =>
+                    createElement(Button, { 
+                        isSecondary: true, 
+                        onClick: () => addSubField(type.value)
+                    }, type.label)
+                )
+            ),
+
+            // 2. List of Existing Sub-Fields
+            createElement('h4', null, `Current Sub-Fields (${subFields.length})`),
+            subFields.length > 0 ? 
+                subFields.map((subField, subIndex) => renderSubFieldSettings(subField, subIndex)) :
+                createElement('p', null, 'No sub-fields defined. Add one above.')
+        );
+    };
+
     // --- Render the Field Settings Panel ---
-    const renderSettings = () => {
+    // const renderSettings = () => {
+    //     if (!selectedField) return <p>Select a field on the left to edit its properties.</p>;
+        
+    //     const index = fields.indexOf(selectedField);
+
+    //     return (
+    //         <Panel header="Field Settings">
+    //             <PanelBody title={`Editing: ${selectedField.label} (${selectedField.type})`} initialOpen={true}>
+    //                 <TextControl
+    //                     label="Field Label"
+    //                     value={selectedField.label}
+    //                     onChange={val => updateField(index, 'label', val)}
+    //                 />
+    //                 <TextControl
+    //                     label="Attribute Key (Variable Name)"
+    //                     value={selectedField.key}
+    //                     help="Must be unique, lowercase, and contain only letters, numbers, and underscores."
+    //                     onChange={val => updateField(index, 'key', val)}
+    //                 />
+    //                 <TextControl
+    //                     label="Default Value (Optional)"
+    //                     value={selectedField.default}
+    //                     onChange={val => updateField(index, 'default', val)}
+    //                 />
+    //                 <Button 
+    //                     isDestructive 
+    //                     onClick={() => removeField(index)} 
+    //                     style={{marginTop: '10px'}}
+    //                 >
+    //                     Delete Field
+    //                 </Button>
+    //             </PanelBody>
+    //         </Panel>
+    //     );
+    // };
+    // --- Render the Field Settings Panel ---
+    const renderSettings = () => { // <--- THIS FUNCTION IS REPLACED
         if (!selectedField) return <p>Select a field on the left to edit its properties.</p>;
         
         const index = fields.indexOf(selectedField);
 
         return (
             <Panel header="Field Settings">
+                {/* Standard Settings (Label, Key, Default, Delete) */}
                 <PanelBody title={`Editing: ${selectedField.label} (${selectedField.type})`} initialOpen={true}>
                     <TextControl
                         label="Field Label"
@@ -135,6 +267,11 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                         Delete Field
                     </Button>
                 </PanelBody>
+
+                {/* CONDITIONALLY RENDER REPEATER SUB-FIELDS SETTINGS */}
+                {selectedField.type === 'repeater' && 
+                    renderRepeaterSettings(selectedField, index, updateField, removeField)
+                }
             </Panel>
         );
     };

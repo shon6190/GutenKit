@@ -3,7 +3,7 @@
 import { useBlockProps, InspectorControls, RichText } from '@wordpress/block-editor'; 
 
 // This line handles all standard UI components (TextControl, Button, PanelBody, etc.)
-import { PanelBody, TextControl, RangeControl, ToggleControl, TextareaControl } from '@wordpress/components';
+import { PanelBody, TextControl, RangeControl, ToggleControl, TextareaControl, Button } from '@wordpress/components';
 
 const Edit = ( { attributes, setAttributes } ) => {
 	const blockProps = useBlockProps();
