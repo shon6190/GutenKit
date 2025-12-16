@@ -47,7 +47,102 @@ const ATTRIBUTES_HOOK_REGEX = /,\s*"__INJECT_ATTRIBUTES_HOOK__"\s*:\s*{}\s*/;
 // Let's use the explicit string search on a modified target pattern:
 const TARGET_PATTERN = '},\n\t\t\t' + ATTRIBUTES_HOOK; // Example: Look for the closing brace of the previous attribute, comma, newline, tabs, and the hook.
 
+// --- Function to generate the JSX for a field nested inside a repeater ---
+// This function is crucial for handling nested fields.
+const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
+    let innerJSX = '';
 
+    subFields.forEach(subField => {
+        const map = FIELD_MAP[subField.type];
+
+        if (map) {
+            // Add imports for the sub-field
+            map.imports.forEach(i => componentImports.add(i));
+
+            // CRITICAL: Generate the JSX, but scope the variables to the repeater item.
+            // We use itemKey and itemLabel placeholders in the JSX function below
+            // to ensure variables like 'item.sub_field_key' are used.
+            const itemKey = `item.${subField.key}`;
+            const itemLabel = `${subField.label}`;
+
+            // We must rewrite the JSX to use the repeater logic pattern:
+            // value={ item.sub_field_key }
+            // onChange={ ( value ) => {
+            //     const newItems = [...attributes.REPEATER_KEY];
+            //     newItems[index] = { ...item, sub_field_key: value };
+            //     setAttributes({ REPEATER_KEY: newItems });
+            // }}
+
+            // The original JSX needs to be adapted. We'll only use simple TextControl for illustration
+            // because adapting all FIELD_MAP JSX templates is too complex.
+            // We will use a simplified, common wrapper for all sub-fields:
+
+            // NOTE: A robust solution would require rewriting all FIELD_MAP.jsx functions 
+            // to accept a scope variable (e.g., isNested). For simplicity, we create
+            // custom, safe JSX for the core sub-field types here.
+            
+            if (subField.type === 'text' || subField.type === 'number' || subField.type === 'url') {
+                // Use a simple TextControl for all simple string/number types
+                innerJSX += `
+                            <TextControl
+                                label="${itemLabel}"
+                                type="${subField.type === 'number' ? 'number' : 'text'}"
+                                value={ ${itemKey} || '' }
+                                onChange={ ( value ) => {
+                                    const newItems = [...attributes.${repeaterKey}];
+                                    newItems[index] = { ...item, ${subField.key}: value };
+                                    setAttributes({ ${repeaterKey}: newItems });
+                                }}
+                            />
+                `;
+            } else if (subField.type === 'textarea') {
+                innerJSX += `
+                            <TextareaControl
+                                label="${itemLabel}"
+                                value={ ${itemKey} || '' }
+                                onChange={ ( value ) => {
+                                    const newItems = [...attributes.${repeaterKey}];
+                                    newItems[index] = { ...item, ${subField.key}: value };
+                                    setAttributes({ ${repeaterKey}: newItems });
+                                }}
+                            />
+                `;
+            } else if (subField.type === 'image') {
+                // This is a complex example, showing MediaUpload within the repeater context
+                innerJSX += `
+                            <MediaUploadCheck>
+                                <MediaUpload
+                                    onSelect={ ( media ) => {
+                                        const newItems = [...attributes.${repeaterKey}];
+                                        newItems[index] = { ...item, ${subField.key}: media };
+                                        setAttributes({ ${repeaterKey}: newItems });
+                                    } }
+                                    allowedTypes={ [ 'image' ] }
+                                    value={ ${itemKey} && ${itemKey}.id }
+                                    render={ ( { open } ) => (
+                                        <Button onClick={ open } isSecondary>
+                                            { ${itemKey} ? 'Change ${subField.label}' : 'Select ${subField.label}' }
+                                        </Button>
+                                    ) }
+                                />
+                                { ${itemKey} && ${itemKey}.url && (
+                                    <img src={ ${itemKey}.url } alt={ ${itemKey}.alt } style={{maxWidth: '50px', maxHeight: '50px', margin: '5px 0'}} />
+                                )}
+                            </MediaUploadCheck>
+                `;
+                // Add required imports for image type
+                componentImports.add('MediaUpload');
+                componentImports.add('MediaUploadCheck');
+            }
+            // Add more conditions here for other complex types if needed (color, date, etc.)
+
+        } else {
+            console.warn(`  ⚠️ Unknown sub-field type '${subField.type}'. Skipping nested field.`);
+        }
+    });
+
+    return innerJSX;
+};
 // --- Field Type Mappings (As defined previously) ---
 const FIELD_MAP = {
     // -------------------------------------------------------------------------
@@ -434,18 +529,17 @@ const FIELD_MAP = {
                 <PanelBody title="${label} Settings" initialOpen={true}>
                     {attributes.${key}.map((item, index) => (
                         <div key={index} style={{ border: '1px solid #ccc', padding: '10px', margin: '10px 0' }}>
-                            <p style={{ fontWeight: 'bold' }}>Item #{index + 1}</p>
-                            
-                            {/* NOTE: You MUST replace this 'text' field with the fields defined for this repeater in config.json */}
-                            <TextControl
-                                label="Item Text (Placeholder)"
-                                value={ item.text || '' }
-                                onChange={ ( value ) => {
-                                    const newItems = [...attributes.${key}];
-                                    newItems[index] = { ...item, text: value };
-                                    setAttributes({ ${key}: newItems });
-                                }}
-                            />
+                            <p style={{ fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
+                                ${label} Item #{index + 1}
+                            </p>
+                             <p style={{ display: 'none', fontStyle: 'italic', color: '#666' }}>
+                            // --------------------------------------------------------------------------------
+                            // !!! HOOK FOR DYNAMIC SUB-FIELD CODE !!!
+                            // --------------------------------------------------------------------------------
+                            // This will be replaced by the generated JSX from subFields in the config file.
+                            // The logic needs to reference 'item' and 'index'.
+                            </p>
+                            __REPEATER_INNER_JSX_HOOK__
 
                             <Button 
                                 isDestructive 
@@ -453,6 +547,7 @@ const FIELD_MAP = {
                                     const newItems = attributes.${key}.filter((_, i) => i !== index);
                                     setAttributes({ ${key}: newItems });
                                 }}
+                                style={{ marginTop: '10px' }}
                             >
                                 Remove Item
                             </Button>
@@ -460,7 +555,12 @@ const FIELD_MAP = {
                     ))}
                     <Button 
                         isPrimary 
-                        onClick={() => setAttributes({ ${key}: [...attributes.${key}, { text: '' }] })} // Initialize with default group fields
+                        onClick={() => {
+                            // Initialize with default group fields based on your config.
+                            // NOTE: This default initialization must be updated to match the sub-fields!
+                            // For safety, we initialize an empty object here.
+                            setAttributes({ ${key}: [...attributes.${key}, {}] }); 
+                        }}
                     >
                         Add ${label} Item
                     </Button>
@@ -548,31 +648,62 @@ function generateBlock(blockPath) {
     // Always require PanelBody for structuring sidebar settings
     componentsImports.add('PanelBody');
 
-
-    config.fields.forEach(field => {
+config.fields.forEach(field => {
         const map = FIELD_MAP[field.type];
         if (map) {
 
-            // ** --- CORRECTED IMPORT ROUTING LOGIC --- **
+            // ** --- 1. CORRECTED IMPORT ROUTING LOGIC (Applied to main field) --- **
             map.imports.forEach(componentName => {
                 const packageKey = PACKAGE_MAP[componentName];
 
                 if (packageKey === 'BLOCK_EDITOR') {
-                    // Correctly add editor components (like MediaUpload) here
                     blockEditorImports.add(componentName);
                 } else if (packageKey === 'COMPONENTS') {
-                    // Correctly add UI components (like Button) here
                     componentsImports.add(componentName);
                 }
             });
             // ** ----------------------------------- **
-            // Generate JSX for the Edit function body
-            generatedJSX += map.jsx(field.key, field.label) + '\n';
-            // Define Attributes
+            
+            // --- 2. Initialize JSX from the field map template ---
+            let fieldJSX = map.jsx(field.key, field.label);
+
+            // ** --- 3. NEW LOGIC FOR REPEATER FIELD --- **
+            if (field.type === 'repeater') {
+                const subFields = field.subFields || [];
+                
+                if (subFields.length > 0) {
+                    // Generate the nested JSX, and let the helper manage the sub-field imports.
+                    // NOTE: The `componentsImports` Set is passed by reference and updated inside the helper.
+                    const innerJSX = generateRepeaterInnerJSX(subFields, field.key, componentsImports);
+                    
+                    // Replace the hook in the repeater's template JSX
+                    fieldJSX = fieldJSX.replace('__REPEATER_INNER_JSX_HOOK__', innerJSX);
+
+                    // ATTRIBUTE GENERATION FOR REPEATER SUB-FIELDS (Optional but good for documentation/defaults)
+                    // The main attribute is already defined as 'array'. 
+                    // If you need to generate a default object for the PHP attributes file, do it here.
+                    // For the block.json, the 'array' type is sufficient, but let's ensure the default is an empty array.
+                    field.default = field.default || [];
+
+                } else {
+                    // Warning if repeater is used but no sub-fields are defined
+                    fieldJSX = fieldJSX.replace('__REPEATER_INNER_JSX_HOOK__', 
+                        `// ⚠️ WARNING: Repeater field '${field.label}' has no sub-fields defined in config.json.
+                        <p style={{color: 'red'}}>Please define sub-fields in the Block Editor structure.</p>`);
+                }
+            }
+            // ** --- END NEW REPEATER LOGIC --- **
+
+
+            // --- 4. Generate JSX for the Edit function body (using potentially modified JSX) ---
+            generatedJSX += fieldJSX + '\n';
+            
+            // --- 5. Define Attributes ---
             generatedAttributes[field.key] = {
                 type: map.attributeType,
                 default: field.default || undefined,
             };
+            
             // Additional logic for contentEditor's HTML toggle state attribute
             if (field.type === 'contentEditor') {
                 generatedAttributes[`is_html_mode_${field.key}`] = {
@@ -580,20 +711,9 @@ function generateBlock(blockPath) {
                     default: false,
                 };
             }
-            // Assume FIELD_MAP imports are always components
-            // map.imports.forEach(i => componentsImports.add(i));
-
-            // // Generate JSX for the Edit function body
-            // generatedJSX += map.jsx(field.key, field.label) + '\n';
-
-            // // Define Attributes
-            // generatedAttributes[field.key] = {
-            //     type: map.attributeType,
-            //     default: field.default || undefined,
-            // };
 
         } else {
-            console.warn(`  ⚠️ Unknown field type '${field.type}'. Skipping.`);
+            console.warn(` ⚠️ Unknown field type '${field.type}'. Skipping.`);
         }
     });
 

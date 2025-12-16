@@ -23,6 +23,8 @@ define('BLOCK_FACTORY_URL', plugin_dir_url(__FILE__));
 define('BLOCKS_BASE_PATH', BLOCK_FACTORY_PATH . 'blocks/'); // source folder (generator writes here)
 define('BUILD_BASE_PATH', BLOCK_FACTORY_PATH . 'build/');   // compiled output (npm run build writes here)
 
+
+
 // ------------------------------------------------------------------
 // ADMIN MENU
 // ------------------------------------------------------------------
@@ -100,6 +102,43 @@ function block_factory_router()
 }
 add_action('admin_init', 'block_factory_router');
 
+
+// In your main PHP plugin file (e.g., block-factory.php)
+
+function block_factory_enqueue_admin_scripts($hook)
+{
+    // CRITICAL: Check if we are on the correct custom admin page.
+    // Replace 'gutenberg-factory' with the menu slug you used when defining your admin page.
+    $target_page = 'toplevel_page_block-factory'; // Example: Toplevel page hook
+    if ($hook !== $target_page) {
+        return;
+    }
+
+    // Enqueue jQuery since your script relies on it ($)
+    wp_enqueue_script('jquery');
+
+    // Enqueue your custom deletion script
+    wp_enqueue_script(
+        'block-factory-admin-script',
+        plugins_url('assets/js/admin.js', __FILE__), // Path to your new file
+        array('jquery'), // Dependencies (requires jQuery)
+        '1.0',
+        true // Load in the footer
+    );
+
+    // CRITICAL: Localize the data for the script to use
+    // The script needs the AJAX URL and the security nonce.
+    wp_localize_script(
+        'block-factory-admin-script',
+        'blockFactoryEditorData', // The variable name used in the JS file
+        array(
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('block_factory_nonce'), // MUST match the nonce used in the PHP handler!
+        )
+    );
+}
+add_action('admin_enqueue_scripts', 'block_factory_enqueue_admin_scripts');
+
 // ------------------------------------------------------------------
 // Admin Page Content - list existing blocks + generator form
 // ------------------------------------------------------------------
@@ -131,7 +170,15 @@ function block_factory_page_content()
             echo '<tr>';
             echo '<td><strong>' . esc_html($block_name) . '</strong></td>';
             echo '<td><code>' . esc_html($block_slug) . '</code></td>';
-            echo '<td><a href="' . esc_url($edit_url) . '">Edit Structure</a></td>';
+            echo '<td><a href="' . esc_url($edit_url) . '">Edit Structure</a>';
+            // --- NEW DELETE LINK ---
+            echo ' | <a href="#" 
+           class="block-factory-delete-btn" 
+           data-slug="' . esc_attr($block_slug) . '" 
+           style="color: red;"
+           title="Permanently delete all files for this block."
+           >Delete</a></td>';
+
             echo '</tr>';
         }
 
@@ -430,3 +477,91 @@ function block_factory_handle_save_structure()
     }
 }
 add_action('wp_ajax_block_factory_save_structure', 'block_factory_handle_save_structure');
+
+
+
+// Hook the AJAX action
+add_action('wp_ajax_block_factory_delete_block', 'block_factory_delete_block_handler');
+
+function block_factory_delete_block_handler()
+{
+    // 1. Security Checks
+    check_ajax_referer('block_factory_nonce', 'nonce'); // Replace with your actual nonce name
+
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Permission denied.'], 403);
+        return;
+    }
+
+    $block_slug = sanitize_title($_POST['block_slug']);
+    if (empty($block_slug)) {
+        wp_send_json_error(['message' => 'Invalid block slug.'], 400);
+        return;
+    }
+
+    // 2. Define Paths to Delete
+    $blocks_path = BLOCKS_BASE_PATH . $block_slug;
+    $build_path = BUILD_BASE_PATH . $block_slug;
+
+    $errors = [];
+    $success = [];
+
+    // 3. Recursive Directory Deletion Helper
+    $delete_dir_recursive = function ($dir) use (&$errors, $block_slug) {
+        if (!is_dir($dir)) {
+            return true; // Nothing to delete
+        }
+
+        // Use a recursive iterator to delete contents
+        $it = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
+        $files = new RecursiveIteratorIterator($it, RecursiveIteratorIterator::CHILD_FIRST);
+
+        foreach ($files as $file) {
+            if ($file->isDir()) {
+                if (!@rmdir($file->getRealPath())) { // Use @ to suppress PHP warnings
+                    $errors[] = "Failed to remove directory: " . $file->getRealPath();
+                }
+            } else {
+                if (!@unlink($file->getRealPath())) {
+                    $errors[] = "Failed to remove file: " . $file->getRealPath();
+                }
+            }
+        }
+
+        // Finally, delete the directory itself
+        if (!@rmdir($dir)) {
+            $errors[] = "Failed to remove block directory: " . $dir;
+            return false;
+        }
+        return true;
+    };
+
+
+    // 4. Execute Deletion
+
+    // Delete from the /blocks directory
+    if ($delete_dir_recursive($blocks_path)) {
+        $success[] = "Successfully deleted source files from /blocks/$block_slug";
+    }
+
+    // Delete from the /build directory (this contains compiled assets and config/block files)
+    if ($delete_dir_recursive($build_path)) {
+        $success[] = "Successfully deleted build files from /build/$block_slug";
+    }
+
+    // 5. Send Response
+    if (empty($errors)) {
+        wp_send_json_success([
+            'message' => 'Block files successfully removed.',
+            'details' => $success
+        ]);
+    } else {
+        // Log errors to the WP debug log if available
+        error_log('Block Deletion Errors for ' . $block_slug . ': ' . print_r($errors, true));
+
+        wp_send_json_error([
+            'message' => 'Deletion failed for one or more files. Check PHP error logs for details.',
+            'details' => $errors
+        ]);
+    }
+}

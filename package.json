@@ -9,9 +9,9 @@
     "build": "wp-scripts build --config webpack.config.js"
   },
   "devDependencies": {
+    "@wordpress/media-utils": "^5.0.0",
     "@wordpress/scripts": "^26.0.0",
     "copy-webpack-plugin": "^13.0.1",
-    "@wordpress/media-utils": "^5.0.0",
-    "glob": "^10.4.5" 
+    "glob": "^8.1.0"
   }
 }
