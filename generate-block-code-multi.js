@@ -49,7 +49,8 @@ const TARGET_PATTERN = '},\n\t\t\t' + ATTRIBUTES_HOOK; // Example: Look for the 
 
 // --- Function to generate the JSX for a field nested inside a repeater ---
 // This function is crucial for handling nested fields.
-const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
+// const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
+const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports, blockEditorImports) => {
     let innerJSX = '';
 
     subFields.forEach(subField => {
@@ -65,14 +66,6 @@ const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
             const itemKey = `item.${subField.key}`;
             const itemLabel = `${subField.label}`;
 
-            // We must rewrite the JSX to use the repeater logic pattern:
-            // value={ item.sub_field_key }
-            // onChange={ ( value ) => {
-            //     const newItems = [...attributes.REPEATER_KEY];
-            //     newItems[index] = { ...item, sub_field_key: value };
-            //     setAttributes({ REPEATER_KEY: newItems });
-            // }}
-
             // The original JSX needs to be adapted. We'll only use simple TextControl for illustration
             // because adapting all FIELD_MAP JSX templates is too complex.
             // We will use a simplified, common wrapper for all sub-fields:
@@ -80,7 +73,7 @@ const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
             // NOTE: A robust solution would require rewriting all FIELD_MAP.jsx functions 
             // to accept a scope variable (e.g., isNested). For simplicity, we create
             // custom, safe JSX for the core sub-field types here.
-            
+
             if (subField.type === 'text' || subField.type === 'number' || subField.type === 'url') {
                 // Use a simple TextControl for all simple string/number types
                 innerJSX += `
@@ -112,13 +105,7 @@ const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
                 innerJSX += `
                             <MediaUploadCheck>
                                 <MediaUpload
-                                    onSelect={ ( media ) => {
-                                        const newItems = [...attributes.${repeaterKey}];
-                                        newItems[index] = { ...item, ${subField.key}: media };
-                                        setAttributes({ ${repeaterKey}: newItems });
-                                    } }
-                                    allowedTypes={ [ 'image' ] }
-                                    value={ ${itemKey} && ${itemKey}.id }
+                                    // ... rest of the MediaUpload JSX ...
                                     render={ ( { open } ) => (
                                         <Button onClick={ open } isSecondary>
                                             { ${itemKey} ? 'Change ${subField.label}' : 'Select ${subField.label}' }
@@ -130,9 +117,12 @@ const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports) => {
                                 )}
                             </MediaUploadCheck>
                 `;
-                // Add required imports for image type
-                componentImports.add('MediaUpload');
-                componentImports.add('MediaUploadCheck');
+
+                // --- FIX: Ensure Button is explicitly added to the import list ---
+                componentImports.add('Button');
+                // These are already correct:
+                blockEditorImports.add('MediaUpload');
+                blockEditorImports.add('MediaUploadCheck');
             }
             // Add more conditions here for other complex types if needed (color, date, etc.)
 
@@ -252,7 +242,8 @@ const FIELD_MAP = {
     // -------------------------------------------------------------------------
 
     'image': {
-        imports: ['MediaUpload', 'MediaUploadCheck', 'Button', 'InspectorControls', 'PanelBody'],
+        // imports: ['MediaUpload', 'MediaUploadCheck', 'Button', 'InspectorControls', 'PanelBody'],
+        imports: ['Button', 'InspectorControls', 'PanelBody'],
         attributeType: 'object', // Stores {id, url, alt}
         jsx: (key, label) => `
             <InspectorControls key="${key}-settings">
@@ -283,7 +274,8 @@ const FIELD_MAP = {
         `,
     },
     'file': {
-        imports: ['MediaUpload', 'MediaUploadCheck', 'Button', 'InspectorControls', 'PanelBody'],
+        // imports: ['MediaUpload', 'MediaUploadCheck', 'Button', 'InspectorControls', 'PanelBody'],
+        imports: ['Button', 'InspectorControls', 'PanelBody'],
         attributeType: 'object', // Stores {id, url, filename}
         jsx: (key, label) => `
             <InspectorControls key="${key}-settings">
@@ -313,7 +305,8 @@ const FIELD_MAP = {
         `,
     },
     'gallery': {
-        imports: ['MediaUpload', 'MediaUploadCheck', 'Button', 'InspectorControls', 'PanelBody'],
+        // imports: ['MediaUpload', 'MediaUploadCheck', 'Button', 'InspectorControls', 'PanelBody'],
+        imports: ['Button', 'InspectorControls', 'PanelBody'],
         attributeType: 'array', // Stores an array of {id, url, alt} objects
         jsx: (key, label) => `
             <InspectorControls key="${key}-settings">
@@ -648,7 +641,7 @@ function generateBlock(blockPath) {
     // Always require PanelBody for structuring sidebar settings
     componentsImports.add('PanelBody');
 
-config.fields.forEach(field => {
+    config.fields.forEach(field => {
         const map = FIELD_MAP[field.type];
         if (map) {
 
@@ -663,33 +656,38 @@ config.fields.forEach(field => {
                 }
             });
             // ** ----------------------------------- **
-            
+
+            // --- NEW: Explicitly route BLOCK_EDITOR imports for Image/File/Gallery ---
+            // This fixes the crash for DIRECT image/file fields whose imports were removed 
+            // from FIELD_MAP.imports to avoid double declaration.
+            if (field.type === 'image' || field.type === 'file' || field.type === 'gallery') {
+                blockEditorImports.add('MediaUpload');
+                blockEditorImports.add('MediaUploadCheck');
+            }
+            // --- END NEW LOGIC ---
+
             // --- 2. Initialize JSX from the field map template ---
             let fieldJSX = map.jsx(field.key, field.label);
 
             // ** --- 3. NEW LOGIC FOR REPEATER FIELD --- **
             if (field.type === 'repeater') {
                 const subFields = field.subFields || [];
-                
+
                 if (subFields.length > 0) {
-                    // Generate the nested JSX, and let the helper manage the sub-field imports.
-                    // NOTE: The `componentsImports` Set is passed by reference and updated inside the helper.
-                    const innerJSX = generateRepeaterInnerJSX(subFields, field.key, componentsImports);
-                    
+                    // Pass both import sets for the helper to manage nested component imports
+                    const innerJSX = generateRepeaterInnerJSX(subFields, field.key, componentsImports, blockEditorImports);
+
                     // Replace the hook in the repeater's template JSX
                     fieldJSX = fieldJSX.replace('__REPEATER_INNER_JSX_HOOK__', innerJSX);
 
-                    // ATTRIBUTE GENERATION FOR REPEATER SUB-FIELDS (Optional but good for documentation/defaults)
-                    // The main attribute is already defined as 'array'. 
-                    // If you need to generate a default object for the PHP attributes file, do it here.
-                    // For the block.json, the 'array' type is sufficient, but let's ensure the default is an empty array.
+                    // Ensure default is array for repeater
                     field.default = field.default || [];
 
                 } else {
                     // Warning if repeater is used but no sub-fields are defined
-                    fieldJSX = fieldJSX.replace('__REPEATER_INNER_JSX_HOOK__', 
+                    fieldJSX = fieldJSX.replace('__REPEATER_INNER_JSX_HOOK__',
                         `// ⚠️ WARNING: Repeater field '${field.label}' has no sub-fields defined in config.json.
-                        <p style={{color: 'red'}}>Please define sub-fields in the Block Editor structure.</p>`);
+                    <p style={{color: 'red'}}>Please define sub-fields in the Block Editor structure.</p>`);
                 }
             }
             // ** --- END NEW REPEATER LOGIC --- **
@@ -697,13 +695,13 @@ config.fields.forEach(field => {
 
             // --- 4. Generate JSX for the Edit function body (using potentially modified JSX) ---
             generatedJSX += fieldJSX + '\n';
-            
+
             // --- 5. Define Attributes ---
             generatedAttributes[field.key] = {
                 type: map.attributeType,
                 default: field.default || undefined,
             };
-            
+
             // Additional logic for contentEditor's HTML toggle state attribute
             if (field.type === 'contentEditor') {
                 generatedAttributes[`is_html_mode_${field.key}`] = {
@@ -716,7 +714,6 @@ config.fields.forEach(field => {
             console.warn(` ⚠️ Unknown field type '${field.type}'. Skipping.`);
         }
     });
-
     // --- 3. Generate Import Statements ---
 
     // Remove components that should be imported from @wordpress/block-editor
