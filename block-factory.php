@@ -470,6 +470,7 @@ function block_factory_handle_save_structure()
     if ($success) {
 
         //regenerate edit.js when structure changes
+        block_factory_update_block_json($block_slug, $config_data);
         block_factory_regenerate_edit_js($block_slug, $config_data);
 
         wp_send_json_success(array(
@@ -599,4 +600,34 @@ function block_factory_regenerate_edit_js($block_slug, $config_data)
     );
 
     return file_put_contents($edit_js_path, $final_js) !== false;
+}
+
+function block_factory_update_block_json($block_slug, $config_data) {
+    // print_r($config_data);exit;
+    $json_path = BLOCKS_BASE_PATH . $block_slug . '/block.json';
+    if (!file_exists($json_path)) return;
+
+    $block_meta = json_decode(file_get_contents($json_path), true);
+    
+    // Ensure the attributes key exists
+    if (!isset($block_meta['attributes'])) {
+        $block_meta['attributes'] = [];
+    }
+
+    // Add every field from your config to the attributes list
+    foreach ($config_data['fields'] as $field) {
+        $key = $field['key'];
+        if (!isset($block_meta['attributes'][$key])) {
+            // Map field types to JSON types
+            $type = ($field['type'] === 'number' || $field['type'] === 'range') ? 'number' : 'string';
+            if ($field['type'] === 'repeater') $type = 'array';
+            if ($field['type'] === 'image' || $field['type'] === 'file') $type = 'object';
+
+            $block_meta['attributes'][$key] = [
+                'type' => $type
+            ];
+        }
+    }
+
+    file_put_contents($json_path, json_encode($block_meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 }
