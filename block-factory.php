@@ -442,6 +442,46 @@ add_action('init', 'block_factory_register_blocks');
 // ------------------------------------------------------------------
 // AJAX: Save structure
 // ------------------------------------------------------------------
+
+// function block_factory_handle_save_structure()
+// {
+//     if (
+//         !isset($_POST['nonce']) ||
+//         !wp_verify_nonce($_POST['nonce'], 'block_factory_save_structure_action') ||
+//         !current_user_can('manage_options')
+//     ) {
+//         wp_send_json_error(array('message' => 'Security check failed.'));
+//     }
+
+//     $block_slug = sanitize_title($_POST['block_slug']);
+//     $config_data_json = isset($_POST['config_data']) ? wp_unslash($_POST['config_data']) : '';
+
+//     if (empty($block_slug) || empty($config_data_json)) {
+//         wp_send_json_error(array('message' => 'Missing block slug or configuration data.'));
+//     }
+
+//     $config_data = json_decode($config_data_json, true);
+
+//     if (is_null($config_data)) {
+//         wp_send_json_error(array('message' => 'Invalid configuration JSON format.'));
+//     }
+
+//     $success = block_factory_write_config($block_slug, $config_data);
+
+//     if ($success) {
+
+//         //regenerate edit.js when structure changes
+//         block_factory_update_block_json($block_slug, $config_data);
+//         block_factory_regenerate_edit_js($block_slug, $config_data);
+
+//         wp_send_json_success(array(
+//             'message' => 'Block structure saved successfully!',
+//             'next_step' => 'Run `npm run build` to compile the block into the build/ folder.'
+//         ));
+//     } else {
+//         wp_send_json_error(array('message' => 'Failed to write configuration file. Check file permissions.'));
+//     }
+// }
 function block_factory_handle_save_structure()
 {
     if (
@@ -468,22 +508,79 @@ function block_factory_handle_save_structure()
     $success = block_factory_write_config($block_slug, $config_data);
 
     if ($success) {
-
-        //regenerate edit.js when structure changes
+        // 1. Update block.json and edit.js (Existing)
         block_factory_update_block_json($block_slug, $config_data);
         block_factory_regenerate_edit_js($block_slug, $config_data);
 
+        // 2. NEW: Generate the cooked render.php file
+        if (isset($config_data['template'])) {
+            block_factory_generate_render_php($block_slug, $config_data);
+        }
+
         wp_send_json_success(array(
-            'message' => 'Block structure saved successfully!',
-            'next_step' => 'Run `npm run build` to compile the block into the build/ folder.'
+            'message' => 'Block structure and Template saved successfully!',
+            'next_step' => 'Run `npm run build` to compile changes.'
         ));
     } else {
-        wp_send_json_error(array('message' => 'Failed to write configuration file. Check file permissions.'));
+        wp_send_json_error(array('message' => 'Failed to write configuration file.'));
     }
 }
 add_action('wp_ajax_block_factory_save_structure', 'block_factory_handle_save_structure');
 
 
+function block_factory_generate_render_php($slug, $config) {
+    $template = $config['template'];
+    $fields   = $config['fields'];
+    $block_dir = BLOCK_FACTORY_PATH . 'blocks/' . $slug; // Adjust path to your plugin structure
+
+    foreach ($fields as $field) {
+        $key = $field['key'];
+        $type = $field['type'];
+
+        // Determine the PHP replacement based on field type
+        switch ($type) {
+            case 'image':
+                $php_replacement = "<?php if(!empty(\$attributes['$key']['url'])): ?>";
+                $php_replacement .= "<img src=\"<?php echo esc_url(\$attributes['$key']['url']); ?>\" alt=\"<?php echo esc_attr(\$attributes['$key']['alt'] ?? ''); ?>\" />";
+                $php_replacement .= "<?php endif; ?>";
+                break;
+            
+            case 'textarea':
+                $php_replacement = "<?php echo wp_kses_post(\$attributes['$key'] ?? ''); ?>";
+                break;
+
+            case 'repeater':
+                // Basic repeater wrapper (can be expanded for sub-fields)
+                $php_replacement = "<?php if(!empty(\$attributes['$key'])): foreach(\$attributes['$key'] as \$item): ?>";
+                $php_replacement .= "";
+                $php_replacement .= "<?php endforeach; endif; ?>";
+                break;
+
+            default:
+                $php_replacement = "<?php echo esc_html(\$attributes['$key'] ?? ''); ?>";
+                break;
+        }
+
+        // Replace the tag in the HTML
+        $template = str_replace('{{' . $key . '}}', $php_replacement, $template);
+    }
+
+    // Wrap the final HTML in a standard PHP block template
+    $file_content = "<?php\n";
+    $file_content .= "/**\n * Auto-generated render file for $slug\n */\n";
+    $file_content .= "\$wrapper_classes = 'bf-block-' . esc_attr('$slug');\n";
+    $file_content .= "?>\n";
+    $file_content .= "<div class=\"<?php echo \$wrapper_classes; ?>\">\n";
+    $file_content .= $template . "\n";
+    $file_content .= "</div>";
+
+    // Save to the block folder
+    if (!file_exists($block_dir)) {
+        mkdir($block_dir, 0755, true);
+    }
+    
+    return file_put_contents($block_dir . '/render.php', $file_content);
+}
 
 // Hook the AJAX action
 add_action('wp_ajax_block_factory_delete_block', 'block_factory_delete_block_handler');
