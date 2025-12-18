@@ -574,7 +574,7 @@ function block_factory_delete_block_handler()
 function block_factory_regenerate_edit_js($block_slug, $config_data)
 {
 
-     $block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
+    $block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
     $template_path = BLOCK_FACTORY_PATH . 'templates/edit.js.tpl';
 
     $edit_js_path = $block_dir . 'edit.js';
@@ -602,30 +602,66 @@ function block_factory_regenerate_edit_js($block_slug, $config_data)
     return file_put_contents($edit_js_path, $final_js) !== false;
 }
 
-function block_factory_update_block_json($block_slug, $config_data) {
+function block_factory_update_block_json($block_slug, $config_data)
+{
     // print_r($config_data);exit;
     $json_path = BLOCKS_BASE_PATH . $block_slug . '/block.json';
-    if (!file_exists($json_path)) return;
+    if (!file_exists($json_path))
+        return;
 
     $block_meta = json_decode(file_get_contents($json_path), true);
-    
+
     // Ensure the attributes key exists
     if (!isset($block_meta['attributes'])) {
         $block_meta['attributes'] = [];
     }
 
     // Add every field from your config to the attributes list
+    // foreach ($config_data['fields'] as $field) {
+    //     $key = $field['key'];
+    //     if (!isset($block_meta['attributes'][$key])) {
+    //         // Map field types to JSON types
+    //         $type = ($field['type'] === 'number' || $field['type'] === 'range') ? 'number' : 'string';
+
+    //         if ($field['type'] === 'repeater' || $field['type'] === 'gallery') {
+    //             $type = 'array';
+    //         }
+    //         if ($field['type'] === 'image' || $field['type'] === 'file') {
+    //             $type = 'object';
+    //         }
+    //         $block_meta['attributes'][$key] = [
+    //             'type' => $type
+    //         ];
+    //     }
+    // }
     foreach ($config_data['fields'] as $field) {
         $key = $field['key'];
-        if (!isset($block_meta['attributes'][$key])) {
-            // Map field types to JSON types
-            $type = ($field['type'] === 'number' || $field['type'] === 'range') ? 'number' : 'string';
-            if ($field['type'] === 'repeater') $type = 'array';
-            if ($field['type'] === 'image' || $field['type'] === 'file') $type = 'object';
 
-            $block_meta['attributes'][$key] = [
-                'type' => $type
-            ];
+        if (!isset($block_meta['attributes'][$key])) {
+            // Default to string
+            $type = 'string';
+
+            // 1. Map basic types
+            if ($field['type'] === 'number' || $field['type'] === 'range' || $field['type'] === 'relational') {
+                $type = 'number';
+            } elseif ($field['type'] === 'image' || $field['type'] === 'file' || $field['type'] === 'button') {
+                $type = 'object';
+            } elseif ($field['type'] === 'repeater' || $field['type'] === 'gallery') {
+                $type = 'array';
+            }
+
+            // 2. Build the attribute definition
+            $attr_definition = ['type' => $type];
+
+            // 3. CRITICAL: Add the items schema for arrays (Gallery/Repeater)
+            if ($type === 'array') {
+                $attr_definition['default'] = [];
+                $attr_definition['items'] = [
+                    'type' => 'object' // This allows the {id, url, alt} objects to be saved
+                ];
+            }
+
+            $block_meta['attributes'][$key] = $attr_definition;
         }
     }
 
