@@ -82,7 +82,8 @@ const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports, bloc
                                 type="${subField.type === 'number' ? 'number' : 'text'}"
                                 value={ ${itemKey} || '' }
                                 onChange={ ( value ) => {
-                                    const newItems = [...attributes.${repeaterKey}];
+                                    const items = Array.isArray(attributes.${repeaterKey}) ? attributes.${repeaterKey} : [];
+                                    const newItems = [...items];
                                     newItems[index] = { ...item, ${subField.key}: value };
                                     setAttributes({ ${repeaterKey}: newItems });
                                 }}
@@ -94,7 +95,8 @@ const generateRepeaterInnerJSX = (subFields, repeaterKey, componentImports, bloc
                                 label="${itemLabel}"
                                 value={ ${itemKey} || '' }
                                 onChange={ ( value ) => {
-                                    const newItems = [...attributes.${repeaterKey}];
+                                    const items = Array.isArray(attributes.${repeaterKey}) ? attributes.${repeaterKey} : [];
+                                    const newItems = [...items];
                                     newItems[index] = { ...item, ${subField.key}: value };
                                     setAttributes({ ${repeaterKey}: newItems });
                                 }}
@@ -442,31 +444,6 @@ const FIELD_MAP = {
             </InspectorControls>
         `,
     },
-
-    // -------------------------------------------------------------------------
-    // COMPLEX / CONTAINER FIELDS
-    // -------------------------------------------------------------------------
-    // 'contentEditor': { // WYSIWYG Editor mapping for the sidebar
-    //     imports: ['RichText', 'InspectorControls', 'PanelBody'],
-    //     attributeType: 'string',
-    //     jsx: (key, label) => `
-    //     <InspectorControls key="${key}-settings">
-    //         <PanelBody title="${label} Content Settings" initialOpen={true}>
-    //             <div style={{ padding: '10px', border: '1px solid #ddd' }}>
-    //                 <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>${label} (Rich Content sss)</p>
-    //                 <RichText
-    //                     tagName="div" 
-    //                     value={ attributes.${key} }
-    //                     // You can customize allowed formats here
-    //                     allowedFormats={ [ 'core/bold', 'core/italic', 'core/link' ] } 
-    //                     onChange={ ( value ) => setAttributes( { ${key}: value } ) }
-    //                     placeholder="Enter rich content here..."
-    //                 />
-    //             </div>
-    //         </PanelBody>
-    //     </InspectorControls>
-    // `,
-    // },
     'contentEditor': {
         // Uses RichText for Visual mode and TextareaControl for HTML mode
         imports: ['RichText', 'InspectorControls', 'PanelBody', 'ToggleControl', 'TextareaControl'],
@@ -516,11 +493,11 @@ const FIELD_MAP = {
     },
     'repeater': {
         imports: ['PanelBody', 'Button', 'TextControl', 'InspectorControls'],
-        attributeType: 'array', // Stores an array of objects
+        attributeType: 'array',
         jsx: (key, label) => `
-            <InspectorControls key="${key}-settings">
-                <PanelBody title="${label} Settings" initialOpen={true}>
-                    {attributes.${key}.map((item, index) => (
+        <InspectorControls key="${key}-settings">
+            <PanelBody title="${label} Settings" initialOpen={true}>
+                {(Array.isArray(attributes.${key}) ? attributes.${key} : []).map((item, index) => (
                         <div key={index} style={{ border: '1px solid #ccc', padding: '10px', margin: '10px 0' }}>
                             <p style={{ fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '5px' }}>
                                 ${label} Item #{index + 1}
@@ -537,7 +514,8 @@ const FIELD_MAP = {
                             <Button 
                                 isDestructive 
                                 onClick={() => {
-                                    const newItems = attributes.${key}.filter((_, i) => i !== index);
+                                    const items = Array.isArray(attributes.${key}) ? attributes.${key} : [];
+                                    const newItems = items.filter((_, i) => i !== index);
                                     setAttributes({ ${key}: newItems });
                                 }}
                                 style={{ marginTop: '10px' }}
@@ -552,7 +530,8 @@ const FIELD_MAP = {
                             // Initialize with default group fields based on your config.
                             // NOTE: This default initialization must be updated to match the sub-fields!
                             // For safety, we initialize an empty object here.
-                            setAttributes({ ${key}: [...attributes.${key}, {}] }); 
+                            const items = Array.isArray(attributes.${key}) ? attributes.${key} : [];
+                            setAttributes({ ${key}: [...items, {}] });
                         }}
                     >
                         Add ${label} Item

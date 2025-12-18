@@ -468,6 +468,10 @@ function block_factory_handle_save_structure()
     $success = block_factory_write_config($block_slug, $config_data);
 
     if ($success) {
+
+        //regenerate edit.js when structure changes
+        block_factory_regenerate_edit_js($block_slug, $config_data);
+
         wp_send_json_success(array(
             'message' => 'Block structure saved successfully!',
             'next_step' => 'Run `npm run build` to compile the block into the build/ folder.'
@@ -564,4 +568,35 @@ function block_factory_delete_block_handler()
             'details' => $errors
         ]);
     }
+}
+
+function block_factory_regenerate_edit_js($block_slug, $config_data)
+{
+
+     $block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
+    $template_path = BLOCK_FACTORY_PATH . 'templates/edit.js.tpl';
+
+    $edit_js_path = $block_dir . 'edit.js';
+
+    if (!file_exists($template_path)) {
+        return false;
+    }
+
+    $template = file_get_contents($template_path);
+
+    // IMPORTANT: keep field casing exactly as stored
+    $fields_json = wp_json_encode($config_data['fields'], JSON_PRETTY_PRINT);
+
+    $replacements = [
+        '{{BLOCK_SLUG}}' => $block_slug,
+        '{{FIELDS_JSON}}' => $fields_json,
+    ];
+
+    $final_js = str_replace(
+        array_keys($replacements),
+        array_values($replacements),
+        $template
+    );
+
+    return file_put_contents($edit_js_path, $final_js) !== false;
 }
