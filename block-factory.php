@@ -302,15 +302,14 @@ function block_factory_write_config($block_slug, $config_data)
 
 function block_factory_handle_shortcode($atts)
 {
-    // ... (shortcode_atts and block_slug validation as before) ...
+    // 1. Setup default attributes
     $atts = shortcode_atts(
         array(
             'slug' => '',
-            'attributes' => '',
-            'content' => '', // Include RichText content here
+            'attributes' => '', // This will be our Base64 string
+            'content' => '',
         ),
-        $atts,
-        'bf_block'
+        $atts
     );
 
     $block_slug = sanitize_title($atts['slug']);
@@ -318,61 +317,38 @@ function block_factory_handle_shortcode($atts)
         return '';
     }
 
-    $attributes_json = $atts['attributes'] ?? '';
+    // 2. Decode the Base64 attributes
     $attributes = array();
+    if (!empty($atts['attributes'])) {
+        $decoded_json = base64_decode($atts['attributes']);
+        $decoded_array = json_decode($decoded_json, true);
 
-    if (!empty($attributes_json)) {
-
-        // 1. CRITICAL FIX: Decode HTML entities (&quot; -> ")
-        $clean = html_entity_decode($attributes_json);
-
-        // 2. Secondary Fix: Remove slashes, in case there was mixed encoding/escaping
-        // If the string was: &quot;default_title&quot; (HTML encoded)
-        // This step will remove backslashes if they were added (e.g., if it was passed via shortcode attribute with \' escaping)
-        $clean = stripslashes($clean);
-
-        // 3. Optional: Remove illegal control characters (if they still exist)
-        $clean = preg_replace('/[\x00-\x1F\x80-\x9F]/u', '', $clean);
-        $clean = trim($clean);
-
-        // 4. Decode the aggressively cleaned string
-        $decoded = json_decode($clean, true);
-
-        // Your debug logic for JSON error (keep this in case of future errors)
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log('JSON Decode Error for block ' . $block_slug . ': ' . json_last_error_msg());
-            error_log('Faulty JSON String (AFTER CLEANING): ' . $clean); // Log the *cleaned* string to see what failed
-        }
-
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            $attributes = $decoded;
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded_array)) {
+            $attributes = $decoded_array;
+        } else {
+            error_log('Block Factory JSON Decode Error for ' . $block_slug . ': ' . json_last_error_msg());
         }
     }
 
-
-    // Assumes your blocks are in 'plugins/block-factory/blocks/block-slug/'
+    // 3. Define the path to your render.php
     $template_path = plugin_dir_path(__FILE__) . 'blocks/' . $block_slug . '/render.php';
 
-    // Check if the block-specific template exists
+    // 4. Render the template
     if (file_exists($template_path)) {
-        // Start output buffering
         ob_start();
 
-        // Pass the variables ($attributes, $content) to the template
-        // NOTE: $attributes and $content will be available inside render.php
-        $content = $atts['content'] ?? ''; // Pass the RichText content
+        // Ensure $content is available for the included render.php
+        $content = $atts['content'] ?? '';
 
+        // $attributes and $content are now available inside render.php
         include $template_path;
 
-        // Return the rendered HTML
         return ob_get_clean();
     } else {
-        // Fallback or error message if the specific template is missing
-        return '<div class="block-factory-error">Error: Rendering template not found for block: ' . esc_html($block_slug) . '</div>';
+        return '<div class="block-factory-error">Error: Template not found for: ' . esc_html($block_slug) . '</div>';
     }
 }
 add_shortcode('bf_block', 'block_factory_handle_shortcode');
-
 
 // ------------------------------------------------------------------
 // BLOCK REGISTRATION
@@ -416,17 +392,11 @@ function block_factory_register_blocks()
             register_block_type_from_metadata($block_path, array(
                 // --- STEP 2: Use a Closure for Dynamic Rendering ---
                 'render_callback' => function ($attributes, $content) use ($block_name) {
-
-                    // The attributes object is now available as $attributes.
-    
-                    // 2a. Encode attributes to a JSON string for the shortcode handler
-                    // This uses your existing reliable method of passing data via shortcode.
+                    // $attributes_json = json_encode($attributes);
+                    // $shortcode_content = '[bf_block slug="' . esc_attr($block_name) . '" attributes=\'' . esc_attr($attributes_json) . '\' content="' . esc_attr($content) . '"]';
                     $attributes_json = json_encode($attributes);
-
-                    // 2b. Build the shortcode string, passing the slug and data
-                    $shortcode_content = '[bf_block slug="' . esc_attr($block_name) . '" attributes=\'' . esc_attr($attributes_json) . '\' content="' . esc_attr($content) . '"]';
-
-                    // 2c. Execute the shortcode (which will call your block_factory_handle_shortcode)
+                    $encoded_data = base64_encode($attributes_json);
+                    $shortcode_content = '[bf_block slug="' . esc_attr($block_name) . '" attributes="' . $encoded_data . '" content="' . esc_attr($content) . '"]';
                     return do_shortcode($shortcode_content);
                 },
                 // --- END render_callback ---
@@ -468,22 +438,149 @@ function block_factory_handle_save_structure()
     $success = block_factory_write_config($block_slug, $config_data);
 
     if ($success) {
-
-        //regenerate edit.js when structure changes
+        // 1. Update block.json and edit.js (Existing)
         block_factory_update_block_json($block_slug, $config_data);
         block_factory_regenerate_edit_js($block_slug, $config_data);
 
+        // 2. NEW: Generate the cooked render.php file
+        if (isset($config_data['template'])) {
+            block_factory_generate_render_php($block_slug, $config_data);
+        }
+
         wp_send_json_success(array(
-            'message' => 'Block structure saved successfully!',
-            'next_step' => 'Run `npm run build` to compile the block into the build/ folder.'
+            'message' => 'Block structure and Template saved successfully!',
+            'next_step' => 'Run `npm run build` to compile changes.'
         ));
     } else {
-        wp_send_json_error(array('message' => 'Failed to write configuration file. Check file permissions.'));
+        wp_send_json_error(array('message' => 'Failed to write configuration file.'));
     }
 }
 add_action('wp_ajax_block_factory_save_structure', 'block_factory_handle_save_structure');
 
 
+function block_factory_generate_render_php($slug, $config)
+{
+    $template = $config['template'];
+    $fields = $config['fields'];
+    $block_dir = BLOCK_FACTORY_PATH . 'blocks/' . $slug; // Adjust path to your plugin structure
+    foreach ($fields as $field) {
+        $key = $field['key'];
+        $type = $field['type'];
+
+        // Determine the PHP replacement based on field type
+
+        switch ($type) {
+            case 'image':
+            case 'file':
+                // Standard object with URL and Alt
+                $php_replacement = "<?php if(!empty(\$attributes['$key']['url'])): ?>";
+                $php_replacement .= "<img src=\"<?php echo esc_url(\$attributes['$key']['url']); ?>\" alt=\"<?php echo esc_attr(\$attributes['$key']['alt'] ?? ''); ?>\" />";
+                $php_replacement .= "<?php endif; ?>";
+                break;
+
+            case 'gallery':
+                // For galleries, we know each item should be an image
+                $php_replacement = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?>\n";
+                $php_replacement .= "    <div class=\"custom-gallery\">\n";
+                $php_replacement .= "        <?php foreach(\$attributes['$key'] as \$item): \n";
+                $php_replacement .= "            \$img_url = \$item['url'] ?? ''; \n"; // Standard image object URL
+                $php_replacement .= "            \$img_alt = \$item['alt'] ?? ''; \n";
+                $php_replacement .= "        ?>\n";
+                $php_replacement .= "            <div class=\"gallery-item\">\n";
+                $php_replacement .= "                <img src=\"<?php echo esc_url(\$img_url); ?>\" alt=\"<?php echo esc_attr(\$img_alt); ?>\" />\n";
+                $php_replacement .= "            </div>\n";
+                $php_replacement .= "        <?php endforeach; ?>\n";
+                $php_replacement .= "    </div>\n";
+                $php_replacement .= "<?php endif; ?>";
+                break;
+
+            case 'relational':
+                // For relational, we assume $item is a Post ID
+                $php_replacement = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?>\n";
+                $php_replacement .= "    <ul class=\"related-posts\">\n";
+                $php_replacement .= "        <?php foreach(\$attributes['$key'] as \$post_id): ?>\n";
+                $php_replacement .= "            <li><a href=\"<?php echo get_permalink(\$post_id); ?>\"><?php echo get_the_title(\$post_id); ?></a></li>\n";
+                $php_replacement .= "        <?php endforeach; ?>\n";
+                $php_replacement .= "    </ul>\n";
+                $php_replacement .= "<?php endif; ?>";
+                break;
+
+            case 'repeater':
+                // Repeaters are generic; we leave a comment so the admin knows to add sub-fields
+                $php_replacement = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?>\n";
+                $php_replacement .= "    <?php foreach(\$attributes['$key'] as \$item): ?>\n";
+                $php_replacement .= "        \n";
+                $php_replacement .= "    <?php endforeach; ?>\n";
+                $php_replacement .= "<?php endif; ?>";
+                break;
+
+            case 'url':
+                // Standard link
+                $php_replacement = "<a href=\"<?php echo esc_url(\$attributes['$key'] ?? '#'); ?>\">Link Label</a>";
+                break;
+
+            case 'button':
+                // Usually a button link
+                $php_replacement = "<a href=\"<?php echo esc_url(\$attributes['$key']['url'] ?? '#'); ?>\" class=\"button\">";
+                $php_replacement .= "<?php echo esc_html(\$attributes['$key']['text'] ?? 'Click Here'); ?>";
+                $php_replacement .= "</a>";
+                break;
+
+            case 'textarea':
+            case 'contentEditor':
+                // Rich text or multiline text requiring HTML tags
+                $php_replacement = "<?php echo wp_kses_post(\$attributes['$key'] ?? ''); ?>";
+                break;
+
+            case 'color':
+                // Inline style output
+                $php_replacement = "style=\"color: <?php echo esc_attr(\$attributes['$key'] ?? 'inherit'); ?>;\"";
+                break;
+
+            case 'icon':
+                // FontAwesome or SVG class/slug
+                $php_replacement = "<i class=\"<?php echo esc_attr(\$attributes['$key'] ?? ''); ?>\"></i>";
+                break;
+
+            case 'email':
+                $php_replacement = "<a href=\"mailto:<?php echo antispambot(\$attributes['$key'] ?? ''); ?>\"><?php echo antispambot(\$attributes['$key'] ?? ''); ?></a>";
+                break;
+
+            case 'number':
+            case 'range':
+            case 'date':
+            case 'time':
+            case 'datetime':
+                // Clean numeric/date strings
+                $php_replacement = "<?php echo esc_attr(\$attributes['$key'] ?? ''); ?>";
+                break;
+
+            case 'text':
+            default:
+                // Plain text
+                $php_replacement = "<?php echo esc_html(\$attributes['$key'] ?? ''); ?>";
+                break;
+        }
+        // Replace the tag in the HTML
+        $template = str_replace('{{' . $key . '}}', $php_replacement, $template);
+    }
+
+    // Wrap the final HTML in a standard PHP block template
+    $file_content = "<?php\n";
+    $file_content .= "/**\n * Auto-generated render file for $slug\n */\n";
+    $file_content .= "\$wrapper_classes = 'bf-block-' . esc_attr('$slug');\n";
+    $file_content .= "?>\n";
+    $file_content .= "<div class=\"<?php echo \$wrapper_classes; ?>\">\n";
+    $file_content .= $template . "\n";
+    $file_content .= "</div>";
+
+    // Save to the block folder
+    if (!file_exists($block_dir)) {
+        mkdir($block_dir, 0755, true);
+    }
+
+    return file_put_contents($block_dir . '/render.php', $file_content);
+}
 
 // Hook the AJAX action
 add_action('wp_ajax_block_factory_delete_block', 'block_factory_delete_block_handler');

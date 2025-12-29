@@ -40,7 +40,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     const [isSaving, setIsSaving] = useState(false);
     const [selectedField, setSelectedField] = useState(null); // Field being edited
     const [message, setMessage] = useState('');
-
+    const [template, setTemplate] = useState(initialConfig.template || '');
     // --- Helper function to add a new field ---
     const addField = (type) => {
         const newField = {
@@ -76,6 +76,23 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
         setSelectedField(null);
     };
 
+    // Helper to insert tags like {{field_key}} at cursor position
+    const insertTagAtCursor = (key) => {
+        const textarea = document.getElementById('bf-html-template-area');
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const text = textarea.value;
+        const tag = `{{${key}}}`;
+        
+        const newContent = text.substring(0, start) + tag + text.substring(end);
+        setTemplate(newContent);
+
+        // Maintain focus and move cursor after the tag
+        setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(start + tag.length, start + tag.length);
+        }, 10);
+    };
     // --- AJAX Save Handler ---
     const handleSave = () => {
         setIsSaving(true);
@@ -85,7 +102,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
             action: 'block_factory_save_structure',
             nonce: blockFactoryEditorData.nonce, // Retrieve nonce from PHP
             block_slug: blockSlug,
-            config_data: JSON.stringify({ fields }),
+            config_data: JSON.stringify({ fields, template }),
         };
 
         // Use standard jQuery/fetch for AJAX submission
@@ -310,23 +327,53 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                         marginBottom: '8px', 
                         border: '1px solid #ddd',
                         backgroundColor: selectedField === field ? '#eaf4ff' : '#fff',
-                        cursor: 'pointer'
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between'
                     },
                     onClick: () => setSelectedField(field)
                 }, 
-                    `${field.label} (${field.type})`
+                createElement('span', null, `${field.label} (${field.type})`),
+                // NEW: Quick-add button next to field names
+                createElement(Button, { 
+                    isSmall: true, 
+                    isTertiary: true,
+                    onClick: (e) => { e.stopPropagation(); insertTagAtCursor(field.key); }
+                }, 'Add to HTML')
                 )
             ),
+            createElement('hr', { style: { margin: '20px 0' } }),
+            // --- NEW SECTION: HTML TEMPLATE EDITOR ---
+            createElement('h3', null, '2. HTML Template'),
+            createElement('p', { style: { fontSize: '12px', color: '#666' } }, 
+                'Write your HTML below. Click the "Add to HTML" buttons above or use {{field_key}} placeholders.'
+            ),
             
+            createElement('textarea', {
+                id: 'bf-html-template-area',
+                value: template,
+                onChange: (e) => setTemplate(e.target.value),
+                style: { 
+                    width: '100%', 
+                    minHeight: '350px', 
+                    fontFamily: 'monospace', 
+                    padding: '12px',
+                    fontSize: '13px',
+                    border: '1px solid #757575',
+                    borderRadius: '4px'
+                },
+                placeholder: `<div class="banner">\n  <h2>{{${fields[0]?.key || 'field_key'}}}</h2>\n</div>`
+            }),
             createElement('hr', null),
             
             // Save Button and Messages
             createElement(Button, { 
                 isPrimary: true,
                 isBusy: isSaving,
-                onClick: handleSave,
+                // onClick: handleSave,
+                onClick: () => handleSave(fields, template), // Pass both to save function
                 disabled: isSaving
-            }, isSaving ? 'Saving...' : 'Save Structure & Regenerate Code'),
+            }, isSaving ? 'Compiling Code...' : 'Save Structure & Build Block'),
 
             message && createElement('p', { style: { marginTop: '15px', fontWeight: 'bold' } }, message)
         ),
