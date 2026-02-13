@@ -152,7 +152,7 @@ class GutenKit_Admin {
 			}
 
 			echo '</tbody></table>';
-			include( BLOCK_FACTORY_PATH . 'admin/generator-form.php' );
+		include( BLOCK_FACTORY_PATH . 'admin/generator-form.php' );
 			?>
 		</div>
 		<?php
