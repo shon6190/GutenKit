@@ -21,6 +21,7 @@ class GutenKit_Generator
 		add_action('wp_ajax_block_factory_save_structure', array($this, 'handle_save_structure'));
 		add_action('wp_ajax_block_factory_delete_block', array($this, 'handle_delete_block'));
 		add_action('wp_ajax_bf_run_npm_build', array($this, 'handle_run_build'));
+		add_action('wp_ajax_bf_install_dependencies', array($this, 'handle_install_dependencies'));
 	}
 
 	/**
@@ -437,4 +438,49 @@ class GutenKit_Generator
 		];
 	}
 
+	/**
+	 * Handle Install Dependencies (AJAX)
+	 */
+	public function handle_install_dependencies()
+	{
+		check_ajax_referer('block_factory_nonce', 'nonce');
+
+		if (!current_user_can('manage_options')) {
+			wp_send_json_error(['message' => 'Permission denied.']);
+		}
+
+		$node_dir = $this->detect_node_environment()['node_dir'];
+		$plugin_dir = BLOCK_FACTORY_PATH;
+
+		// Prepare Command
+		$cmd_prefix = '';
+
+		// Add Node to PATH for this command execution
+		if ($node_dir) {
+			$path_sep = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') ? ';' : ':';
+			$current_path = getenv('PATH');
+			putenv("PATH=$node_dir$path_sep$current_path");
+		}
+
+		// Command to run
+		$cmd = "cd " . escapeshellarg($plugin_dir) . " && npm install 2>&1";
+
+		// Exec
+		exec($cmd, $output, $return_var);
+
+		$output_str = implode("\n", $output);
+
+		if ($return_var === 0) {
+			wp_send_json_success([
+				'message' => 'Dependencies installed successfully.',
+				'output' => $output_str
+			]);
+		} else {
+			wp_send_json_error([
+				'message' => 'npm install failed with exit code ' . $return_var . '. Ensure Node.js and npm are installed on the server.',
+				'output' => $output_str,
+				'node_path_detected' => $node_dir
+			]);
+		}
+	}
 }
