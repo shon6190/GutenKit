@@ -17,16 +17,25 @@ const Edit = ( { attributes, setAttributes } ) => {
 	const blockProps = useBlockProps();
 
 	return (
-		<div { ...blockProps }>
-			// __INJECT_UI_CODE__
-			<RichText
-				tagName="p"
-				value={ attributes.message }
-				allowedFormats={ [ 'core/bold', 'core/italic' ] }
-				onChange={ ( message ) => setAttributes( { message } ) }
-				placeholder="Write your Home Banner message here..."
-			/>
-		</div>
-	);
+        <div { ...blockProps }>
+            {/* 1. SIDEBAR: Settings controls go here */}
+            <InspectorControls>
+                // __INJECT_UI_CODE__
+            </InspectorControls>
+
+            {/* 2. CANVAS: Real-time HTML preview goes here */}
+            <div className="bf-block-canvas-preview">
+                // __INJECT_CANVAS_PREVIEW__
+            </div>
+
+            {/* Default Message (Optional) */}
+            <RichText
+                tagName="p"
+                value={ attributes.message }
+                onChange={ ( message ) => setAttributes( { message } ) }
+                placeholder="Write your message..."
+            />
+        </div>
+    );
 };
 export default Edit;

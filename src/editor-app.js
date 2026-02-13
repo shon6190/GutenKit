@@ -94,32 +94,53 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
         }, 10);
     };
     // --- AJAX Save Handler ---
+    // --- AJAX Save Handler ---
     const handleSave = () => {
         setIsSaving(true);
-        setMessage('');
+        setMessage('Saving structure...');
 
         const data = {
             action: 'block_factory_save_structure',
-            nonce: blockFactoryEditorData.nonce, // Retrieve nonce from PHP
+            nonce: blockFactoryEditor.nonce, 
             block_slug: blockSlug,
             config_data: JSON.stringify({ fields, template }),
         };
 
-        // Use standard jQuery/fetch for AJAX submission
         jQuery.post(ajaxurl, data)
             .done(response => {
                 if (response.success) {
-                    setMessage(`✅ Success! ${response.data.message} ${response.data.next_step}`);
+                    setMessage('✅ Structure saved! Starting build...');
+                    triggerBuild(); // Auto-trigger build
                 } else {
                     setMessage(`❌ Error: ${response.data.message}`);
+                    setIsSaving(false);
                 }
             })
             .fail(() => {
                 setMessage('❌ Critical Error: Could not reach the server.');
-            })
-            .always(() => {
                 setIsSaving(false);
             });
+    };
+
+    // --- AJAX Build Trigger ---
+    const triggerBuild = () => {
+        jQuery.post(ajaxurl, {
+            action: 'bf_run_npm_build',
+            nonce: blockFactoryEditor.nonce 
+        })
+        .done(response => {
+            if (response.success) {
+                setMessage('✅ Build Complete! Your block is ready.');
+            } else {
+                setMessage(`⚠️ Build Failed. Error Details:\n${response.output}`);
+            }
+        })
+        .fail(() => {
+            setMessage('⚠️ Save success, but Build request failed.');
+        })
+        .always(() => {
+            setIsSaving(false);
+        });
     };
 
 
@@ -392,13 +413,13 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
 jQuery(document).ready(function() {
     const rootElement = document.getElementById('component-editor-root');
     
-    // Check if the localized data object exists (blockFactoryEditorData)
-    if (rootElement && typeof blockFactoryEditorData !== 'undefined') { 
+    // Check if the localized data object exists (blockFactoryEditor)
+    if (rootElement && typeof blockFactoryEditor !== 'undefined') { 
         wp.element.render(
             createElement(ComponentEditorApp, { 
                 // CRITICAL: Access the nested properties
-                initialConfig: blockFactoryEditorData.config, 
-                blockSlug: blockFactoryEditorData.blockSlug 
+                initialConfig: blockFactoryEditor.config, 
+                blockSlug: blockFactoryEditor.blockSlug 
             }),
             rootElement
         );

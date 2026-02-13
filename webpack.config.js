@@ -13,7 +13,7 @@ const ADMIN_BUILD_DIR = path.resolve(__dirname, 'admin/js');
 
 // --- 2. Dynamically find all block entries ---
 const blockEntries = {};
-const files = glob.sync(`${BLOCKS_SRC_DIR}/*/index.js`);
+const files = glob.sync(`${BLOCKS_SRC_DIR.replace(/\\/g, '/')}/*/index.js`);
 
 files.forEach(file => {
     const blockSlug = path.basename(path.dirname(file));
