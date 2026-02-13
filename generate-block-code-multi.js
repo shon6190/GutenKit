@@ -192,7 +192,7 @@ function generateBlock(blockPath) {
 // --- Main Execution ---
 function generateAllBlocks() {
     console.log('--- Starting Multi-Block Code Generation ---');
-    const blockDirectories = glob.sync(`${BLOCKS_SRC_DIR}/*/`);
+    const blockDirectories = glob.sync(`${BLOCKS_SRC_DIR.replace(/\\/g, '/')}/*/`);
     if (blockDirectories.length === 0) {
         console.log('No block directories found in blocks/. Nothing to generate.');
         return;
