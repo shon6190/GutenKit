@@ -1,4 +1,21 @@
+?>
 <?php
+// Check for node_modules and offer installation if missing
+if (!file_exists(BLOCK_FACTORY_PATH . 'node_modules')) {
+    ?>
+    <div class="notice notice-warning">
+        <p><strong>Node.js Dependencies Missing!</strong> The plugin requires dependencies to build blocks.</p>
+        <button id="bf-install-dependencies-btn" class="button button-secondary">Install Dependencies</button>
+        <span id="bf-install-progress" style="display:none; margin-left: 10px;">
+            <span class="spinner is-active" style="float:none; margin:0;"></span> Installing... (this may take a few
+            minutes)
+        </span>
+        <pre id="bf-install-output"
+            style="display:none; margin-top: 10px; background: #f0f0f0; padding: 10px; overflow: auto; max-height: 200px;"></pre>
+    </div>
+    <?php
+}
+
 // Display success message if block was created
 if (isset($_GET['block_created'])) {
     $block_slug = sanitize_text_field($_GET['block_created']);
@@ -6,7 +23,8 @@ if (isset($_GET['block_created'])) {
     ?>
     <div class="notice notice-success is-dismissible">
         <p>🎉 Success! The **<?php echo esc_html($block_name); ?>** block boilerplate has been created in
-            <code>/blocks/<?php echo esc_html($block_slug); ?></code>.</p>
+            <code>/blocks/<?php echo esc_html($block_slug); ?></code>.
+        </p>
         <p>You can now start developing the block!</p>
     </div>
     <?php
