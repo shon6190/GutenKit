@@ -1,4 +1,3 @@
-?>
 <?php
 // Check for node_modules and offer installation if missing
 if (!file_exists(BLOCK_FACTORY_PATH . 'node_modules')) {
