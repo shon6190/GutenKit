@@ -53,4 +53,40 @@ jQuery(document).ready(function ($) {
             }
         });
     });
+
+    // Handle Install Dependencies
+    $('#bf-install-dependencies-btn').on('click', function(e) {
+        e.preventDefault();
+        const $btn = $(this);
+        const $progress = $('#bf-install-progress');
+        const $output = $('#bf-install-output');
+
+        if (!confirm('This will download and install Node.js dependencies (approx 200MB). It may take a few minutes. Continue?')) {
+            return;
+        }
+
+        $btn.prop('disabled', true).text('Installing...');
+        $progress.show();
+        $output.hide().empty();
+
+        $.post(ajaxurl, {
+            action: 'bf_install_dependencies',
+            nonce: blockFactoryAdmin.nonce
+        })
+        .done(function(response) {
+            if (response.success) {
+                $output.html(response.data.output).show();
+                alert('Dependencies installed successfully! Reloading page...');
+                window.location.reload();
+            } else {
+                $output.html('Error:\n' + response.data.message + '\n\nOutput:\n' + response.data.output).show();
+                alert('Installation Failed. Check the output log below.');
+                $btn.prop('disabled', false).text('Install Dependencies');
+            }
+        })
+        .fail(function() {
+            alert('Server Error: Request failed or timed out. Please check your server logs.');
+            $btn.prop('disabled', false).text('Install Dependencies');
+        });
+    });
 });
