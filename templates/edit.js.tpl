@@ -28,13 +28,6 @@ const Edit = ( { attributes, setAttributes } ) => {
                 // __INJECT_CANVAS_PREVIEW__
             </div>
 
-            {/* Default Message (Optional) */}
-            <RichText
-                tagName="p"
-                value={ attributes.message }
-                onChange={ ( message ) => setAttributes( { message } ) }
-                placeholder="Write your message..."
-            />
         </div>
     );
 };

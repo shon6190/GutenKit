@@ -41,6 +41,8 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     const [selectedField, setSelectedField] = useState(null); // Field being edited
     const [message, setMessage] = useState('');
     const [template, setTemplate] = useState(initialConfig.template || '');
+    const [css, setCss] = useState(initialConfig.css || ''); // NEW: CSS State
+
     // --- Helper function to add a new field ---
     const addField = (type) => {
         const newField = {
@@ -103,7 +105,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
             action: 'block_factory_save_structure',
             nonce: blockFactoryEditor.nonce, 
             block_slug: blockSlug,
-            config_data: JSON.stringify({ fields, template }),
+            config_data: JSON.stringify({ fields, template, css }), // Include CSS
         };
 
         jQuery.post(ajaxurl, data)
@@ -238,9 +240,9 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     // --- Render the Field Settings Panel ---
     // const renderSettings = () => {
     //     if (!selectedField) return <p>Select a field on the left to edit its properties.</p>;
-        
+    //     
     //     const index = fields.indexOf(selectedField);
-
+    //
     //     return (
     //         <Panel header="Field Settings">
     //             <PanelBody title={`Editing: ${selectedField.label} (${selectedField.type})`} initialOpen={true}>
@@ -376,7 +378,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                 onChange: (e) => setTemplate(e.target.value),
                 style: { 
                     width: '100%', 
-                    minHeight: '350px', 
+                    minHeight: '250px', 
                     fontFamily: 'monospace', 
                     padding: '12px',
                     fontSize: '13px',
@@ -385,14 +387,34 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                 },
                 placeholder: `<div class="banner">\n  <h2>{{${fields[0]?.key || 'field_key'}}}</h2>\n</div>`
             }),
+            createElement('hr', { style: { margin: '20px 0' } }),
+
+            // --- 3. CSS EDITOR ---
+            createElement('h3', null, '3. CSS Styles'),
+            createElement('p', { style: { fontSize: '12px', color: '#666' } }, 
+                'Add custom CSS for this block. It will be applied to both the editor and frontend.'
+            ),
+            createElement('textarea', {
+                value: css,
+                onChange: (e) => setCss(e.target.value),
+                style: { 
+                    width: '100%', 
+                    minHeight: '150px', 
+                    fontFamily: 'monospace', 
+                    padding: '12px',
+                    fontSize: '13px',
+                    border: '1px solid #757575',
+                    borderRadius: '4px'
+                },
+                placeholder: `.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}`
+            }),
             createElement('hr', null),
             
             // Save Button and Messages
             createElement(Button, { 
                 isPrimary: true,
                 isBusy: isSaving,
-                // onClick: handleSave,
-                onClick: () => handleSave(fields, template), // Pass both to save function
+                onClick: () => handleSave(), 
                 disabled: isSaving
             }, isSaving ? 'Compiling Code...' : 'Save Structure & Build Block'),
 
