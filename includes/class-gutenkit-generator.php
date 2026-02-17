@@ -543,6 +543,21 @@ class GutenKit_Generator
 									/>
 								";
 								break;
+							case 'range':
+								$inner_jsx .= "
+									<RangeControl 
+										label=\"$sLabel\"
+										value={ item.$sKey }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+										min={ 0 }
+										max={ 100 }
+									/>
+								";
+								break;
 							case 'number':
 								$inner_jsx .= "
 									<TextControl 
@@ -838,12 +853,45 @@ class GutenKit_Generator
 							<div key={ index } className=\"gutenkit-repeater-item\" style={{ padding: '15px', border: '1px solid #e0e0e0', marginBottom: '15px', borderRadius: '4px', background: '#f8f9fa' }}>
 								<div style={{ marginBottom: '15px', fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Item { index + 1 }</div>
 								$inner_jsx
-								<Button isDestructive variant=\"link\" onClick={ () => {
-									const newItems = attributes.$key.filter( ( _, i ) => i !== index );
-									setAttributes( { $key: newItems } );
-								} }>
-									Remove Item
-								</Button>
+								<div className=\"gutenkit-repeater-controls\" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
+									<div className=\"gutenkit-repeater-move-controls\">
+										<Button 
+											icon=\"arrow-up-alt2\" 
+											label=\"Move Up\"
+											isSmall
+											variant=\"secondary\"
+											disabled={ index === 0 }
+											onClick={ () => {
+												const newItems = [...attributes.$key];
+												const temp = newItems[index];
+												newItems[index] = newItems[index - 1];
+												newItems[index - 1] = temp;
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+										<Button 
+											icon=\"arrow-down-alt2\" 
+											label=\"Move Down\"
+											isSmall
+											variant=\"secondary\"
+											disabled={ index === attributes.$key.length - 1 }
+											style={{ marginLeft: '5px' }}
+											onClick={ () => {
+												const newItems = [...attributes.$key];
+												const temp = newItems[index];
+												newItems[index] = newItems[index + 1];
+												newItems[index + 1] = temp;
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+									</div>
+									<Button isDestructive variant=\"link\" isSmall onClick={ () => {
+										const newItems = attributes.$key.filter( ( _, i ) => i !== index );
+										setAttributes( { $key: newItems } );
+									} }>
+										Remove Item
+									</Button>
+								</div>
 							</div>
 						) ) }
 						<Button variant=\"primary\" onClick={ () => {
