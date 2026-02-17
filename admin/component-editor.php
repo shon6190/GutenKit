@@ -21,7 +21,7 @@ $block_name = ucwords(str_replace('-', ' ', $block_slug));
 <div class="wrap">
     <div class="row">
         <h1>Editing Structure for: <?php echo esc_html($block_name); ?></h1>
-        <button id="build-block-btn" class="button button-primary">Build Block</button>
+        <!-- <button id="build-block-btn" class="button button-primary">Build Block</button> -->
     </div>
 
     <p class="description">Define the fields (Text, Textarea, Image, Repeater, etc.) for this block here.</p>

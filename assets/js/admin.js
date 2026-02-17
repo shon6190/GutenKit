@@ -36,23 +36,23 @@ jQuery(document).ready(function ($) {
         }
     });
 
-    $('#build-block-btn').on('click', function () {
-        // Optionally, add a spinner or disable button here
-        $.ajax({
-            url: blockFactoryAdmin.ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'bf_run_npm_build',
-                nonce: blockFactoryAdmin.nonce, // Add nonce for security
-            },
-            success: function (response) {
-                alert(response); // Or update UI with success/failure
-            },
-            error: function () {
-                alert('Error running build.');
-            }
-        });
-    });
+    // $('#build-block-btn').on('click', function () {
+    //     // Optionally, add a spinner or disable button here
+    //     $.ajax({
+    //         url: blockFactoryAdmin.ajaxurl,
+    //         type: 'POST',
+    //         data: {
+    //             action: 'bf_run_npm_build',
+    //             nonce: blockFactoryAdmin.nonce, // Add nonce for security
+    //         },
+    //         success: function (response) {
+    //             alert(response); // Or update UI with success/failure
+    //         },
+    //         error: function () {
+    //             alert('Error running build.');
+    //         }
+    //     });
+    // });
 
     // Handle Install Dependencies
     $('#bf-install-dependencies-btn').on('click', function(e) {
