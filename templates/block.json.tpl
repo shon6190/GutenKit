@@ -11,10 +11,6 @@
             "anchor": true
         },
         "attributes": {
-            "message": {
-                "type": "string",
-                "default": "Edit this content for the __COMPONENT_NAME_TITLE__ block."
-            },
             "default_title": {
                 "type": "string",
                 "default": "Click 'Edit Structure' to define fields."
@@ -22,6 +18,6 @@
             "__INJECT_ATTRIBUTES_HOOK__": {}
         },
         "editorScript": "file:./index.js",
-        "style": "file:./style.css",
+        "style": "file:./style-index.css",
         "editorStyle": "file:./editor.css"
     }

@@ -133,6 +133,13 @@ class GutenKit_Generator
 				$this->generate_render_php($block_slug, $config_data);
 			}
 
+			// Generate style.scss if css is provided
+			if (isset($config_data['css'])) {
+				$style_scss_path = BLOCKS_BASE_PATH . $block_slug . '/style.scss';
+				// We overwrite style.scss with the user's CSS/SCSS
+				file_put_contents($style_scss_path, $config_data['css']);
+			}
+
 			wp_send_json_success(array(
 				'message' => 'Block structure saved!',
 				'next_step' => 'Run build.'
@@ -284,17 +291,155 @@ class GutenKit_Generator
 		}
 
 		$template = file_get_contents($template_path);
-		$fields_json = wp_json_encode($config_data['fields'], JSON_PRETTY_PRINT);
+		$fields = $config_data['fields'];
+		$block_template = isset($config_data['template']) ? $config_data['template'] : '';
+
+		// 1. Generate Inspector Controls (Sidebar)
+		$inspector_controls = $this->generate_inspector_controls($fields);
+
+		// 2. Generate Canvas Preview (HTML)
+		$canvas_preview = $this->generate_canvas_preview($block_template, $fields);
+
+		// 3. Imports
+		$extra_imports_editor = [];
+		$extra_imports_components = ['PanelBody'];
+
+		foreach ($fields as $field) {
+			if ($field['type'] === 'text' || $field['type'] === 'textarea') {
+				if (!in_array('TextControl', $extra_imports_components))
+					$extra_imports_components[] = 'TextControl';
+				if (!in_array('TextareaControl', $extra_imports_components))
+					$extra_imports_components[] = 'TextareaControl';
+			} elseif ($field['type'] === 'image' || $field['type'] === 'file') {
+				if (!in_array('MediaUpload', $extra_imports_editor))
+					$extra_imports_editor[] = 'MediaUpload';
+				if (!in_array('MediaUploadCheck', $extra_imports_editor))
+					$extra_imports_editor[] = 'MediaUploadCheck';
+				if (!in_array('Button', $extra_imports_components))
+					$extra_imports_components[] = 'Button';
+			} elseif ($field['type'] === 'range') {
+				if (!in_array('RangeControl', $extra_imports_components))
+					$extra_imports_components[] = 'RangeControl';
+			} elseif ($field['type'] === 'toggle') {
+				if (!in_array('ToggleControl', $extra_imports_components))
+					$extra_imports_components[] = 'ToggleControl';
+			}
+		}
 
 		$replacements = [
 			'{{BLOCK_SLUG}}' => $block_slug,
-			'{{FIELDS_JSON}}' => $fields_json,
+			'// __INJECT_BLOCK_EDITOR_IMPORTS__' => !empty($extra_imports_editor) ? ', ' . implode(', ', $extra_imports_editor) : '',
+			'// __INJECT_COMPONENTS_IMPORTS__' => !empty($extra_imports_components) ? ', ' . implode(', ', $extra_imports_components) : '',
+			'// __INJECT_UI_CODE__' => $inspector_controls,
+			'// __INJECT_CANVAS_PREVIEW__' => $canvas_preview,
 		];
 
 		$final_js = str_replace(array_keys($replacements), array_values($replacements), $template);
 		return file_put_contents($edit_js_path, $final_js) !== false;
 	}
 
+	private function generate_inspector_controls($fields)
+	{
+		$jsx = '<PanelBody title="Settings" initialOpen={ true }>';
+
+		foreach ($fields as $field) {
+			$key = $field['key'];
+			$label = $field['label'];
+			$type = $field['type'];
+
+			$jsx .= "\n\t\t\t\t";
+
+			switch ($type) {
+				case 'text':
+					$jsx .= "<TextControl label=\"$label\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'textarea':
+					$jsx .= "<TextareaControl label=\"$label\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'range':
+					$jsx .= "<RangeControl label=\"$label\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } min={ 0 } max={ 100 } />";
+					break;
+				case 'image':
+					$jsx .= "<div className=\"media-control\">
+						<label className=\"components-base-control__label\">$label</label>
+						<MediaUploadCheck>
+							<MediaUpload
+								onSelect={ ( media ) => setAttributes( { $key: { url: media.url, alt: media.alt, id: media.id } } ) }
+								allowedTypes={ ['image'] }
+								value={ attributes.$key ? attributes.$key.id : null }
+								render={ ( { open } ) => (
+									<Button onClick={ open } variant=\"secondary\">
+										{ attributes.$key && attributes.$key.url ? 'Replace Image' : 'Upload Image' }
+									</Button>
+								) }
+							/>
+						</MediaUploadCheck>
+						{ attributes.$key && attributes.$key.url && (
+							<div style={{ marginTop: '10px' }}>
+								<img src={ attributes.$key.url } alt={ attributes.$key.alt } style={{ maxWidth: '100%' }} />
+								<Button isLink isDestructive onClick={ () => setAttributes( { $key: null } ) }>Remove</Button>
+							</div>
+						) }
+					</div>";
+					break;
+				default:
+					// Fallback for types not strictly handled yet
+					$jsx .= "<TextControl label=\"$label (Type: $type)\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+			}
+			$jsx .= "<br />";
+		}
+
+		$jsx .= "\n\t\t\t</PanelBody>";
+		return $jsx;
+	}
+
+	private function generate_canvas_preview($template, $fields)
+	{
+		if (empty($template)) {
+			return '<div>Please define a template in the editor.</div>';
+		}
+
+		// We need to construct a JS template string from the HTML
+		// Replace {{key}} with ${attributes.key}
+		// NOTE: We need to be careful about quotes.
+
+		// Escape backticks in the template because we will wrap it in backticks for JS
+		$js_safe_template = str_replace('`', '\`', $template);
+
+		foreach ($fields as $field) {
+			$key = $field['key'];
+			$type = $field['type'];
+
+			// For images, attributes.key is an object {url, alt, id}. 
+			// The user uses {{key}} in HTML. We should probably expect them to use it in src=""
+			// OR we can try to be smart.
+			// Simple approach: Replace {{key}} with ${attributes.key} and let the user handle sub-properties if complex?
+			// User request says "call the created fields data in that textarea itself".
+			// If they have an image field "hero_image", attributes.hero_image is an object.
+			// The HTML might be <img src="{{hero_image}}">.
+			// If we replace {{hero_image}} with ${attributes.hero_image}, it prints [object Object].
+			// So for image types, we might want to flatten or guide them.
+			// BUT, for text it's easy.
+
+			// Let's assume for now simple text replacement.
+			// Only special handling: if attributes.key is undefined/null, show empty string to avoid "undefined" in preview.
+
+			if ($type === 'image' || $type === 'file') {
+				// We'll replace {{key}} with ${attributes.key?.url || ''}
+				$replacement = "\${attributes.$key?.url || ''}";
+			} else {
+				$replacement = "\${attributes.$key || ''}";
+			}
+
+			// Flexible regex for {{ key }} with spaces
+			$js_safe_template = preg_replace('/\{\{\s*' . preg_quote($key, '/') . '\s*\}\}/', $replacement, $js_safe_template);
+		}
+
+		// Return the dangerouslySetInnerHTML
+		// "dangerouslySetInnerHTML={{ __html: `...` }}"
+		return "<div dangerouslySetInnerHTML={{ __html: `$js_safe_template` }} />";
+	}
 	private function generate_render_php($slug, $config)
 	{
 		$template = $config['template'];
@@ -309,7 +454,8 @@ class GutenKit_Generator
 			switch ($type) {
 				case 'image':
 				case 'file':
-					$php = "<?php if(!empty(\$attributes['$key']['url'])): ?><img src=\"<?php echo esc_url(\$attributes['$key']['url']); ?>\" alt=\"<?php echo esc_attr(\$attributes['$key']['alt'] ?? ''); ?>\" /><?php endif; ?>";
+					// Default to URL so it can be used in src="" attributes
+					$php = "<?php echo esc_url(\$attributes['$key']['url'] ?? ''); ?>";
 					break;
 				case 'gallery':
 					$php = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?><div class=\"custom-gallery\"><?php foreach(\$attributes['$key'] as \$item): ?><img src=\"<?php echo esc_url(\$item['url']); ?>\" /><?php endforeach; ?></div><?php endif; ?>";
