@@ -43,6 +43,43 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     const [template, setTemplate] = useState(initialConfig.template || '');
     const [css, setCss] = useState(initialConfig.css || ''); // NEW: CSS State
 
+    // --- Drag and Drop State ---
+    const [draggedIndex, setDraggedIndex] = useState(null);
+    const [draggedSubIndex, setDraggedSubIndex] = useState(null); // NEW: Sub-field drag state
+
+    // --- Drag and Drop Handlers ---
+    const handleDragStart = (e, index) => {
+        setDraggedIndex(index);
+        e.dataTransfer.effectAllowed = "move";
+        // FIX: Let browser handle drag image default, or set it explicitly to the target
+        // e.dataTransfer.setDragImage(e.target.parentNode, 20, 20); // REMOVED CAUSE OF GHOSTING
+    };
+
+    const handleDragOver = (e, index) => {
+        e.preventDefault(); // Necessary to allow dropping
+    };
+
+    // Live Reordering on Drag Enter
+    const handleDragEnter = (e, targetIndex) => {
+        if (draggedIndex === null || draggedIndex === targetIndex) return;
+        
+        const newFields = [...fields];
+        const item = newFields[draggedIndex];
+
+        // Retrieve item at draggedIndex and move it to targetIndex
+        // Simple swap logic for smoother visual update
+        newFields.splice(draggedIndex, 1);
+        newFields.splice(targetIndex, 0, item);
+
+        setFields(newFields);
+        setDraggedIndex(targetIndex); // Update dragged index to new position
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDraggedIndex(null); // Reset drag state
+    };
+
     // --- Helper function to add a new field ---
     const addField = (type) => {
         const newField = {
@@ -183,34 +220,78 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
             const newSubFields = subFields.filter((_, i) => i !== subIndex);
             updateFieldProp(fieldIndex, 'subFields', newSubFields);
         };
+
+        // --- Sub-Field Drag Handlers ---
+        const handleSubDragStart = (e, subIndex) => {
+            e.stopPropagation(); // Prevent bubbling to main field drag
+            setDraggedSubIndex(subIndex);
+            e.dataTransfer.effectAllowed = "move";
+        };
+
+        const handleSubDragEnter = (e, targetSubIndex) => {
+            e.stopPropagation();
+            if (draggedSubIndex === null || draggedSubIndex === targetSubIndex) return;
+
+            const newSubFields = [...subFields];
+            const item = newSubFields[draggedSubIndex];
+
+            newSubFields.splice(draggedSubIndex, 1);
+            newSubFields.splice(targetSubIndex, 0, item);
+
+            updateFieldProp(fieldIndex, 'subFields', newSubFields);
+            setDraggedSubIndex(targetSubIndex);
+        };
+
+        const handleSubDrop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDraggedSubIndex(null);
+        };
         
         // Function to render the settings for an individual sub-field
         const renderSubFieldSettings = (subField, subIndex) => {
             return createElement(
-                PanelBody,
-                { title: `${subField.label} (${subField.type})`, initialOpen: false, key: subIndex, className: 'repeater-sub-field-settings' },
-                createElement(TextControl, {
-                    label: "Sub-Field Label",
-                    value: subField.label,
-                    onChange: val => updateSubField(subIndex, 'label', val),
-                }),
-                createElement(TextControl, {
-                    label: "Attribute Key (Variable Name)",
-                    value: subField.key,
-                    help: "Must be unique, lowercase, and contain only letters, numbers, and underscores.",
-                    onChange: val => updateSubField(subIndex, 'key', val),
-                }),
-                createElement(SelectControl, {
-                    label: "Sub-Field Type",
-                    value: subField.type,
-                    options: FIELD_TYPES.map(t => ({ label: t.label, value: t.value })).filter(t => t.value !== 'repeater'),
-                    onChange: val => updateSubField(subIndex, 'type', val),
-                }),
-                createElement(Button, { 
-                    isDestructive: true, 
-                    onClick: () => removeSubField(subIndex),
-                    style: { marginTop: '10px' }
-                }, 'Delete Sub-Field')
+                'div', // Wrap PanelBody in a div to handle drag events properly
+                {
+                    key: subIndex,
+                    draggable: true,
+                    onDragStart: (e) => handleSubDragStart(e, subIndex),
+                    onDragOver: (e) => e.preventDefault(),
+                    onDragEnter: (e) => handleSubDragEnter(e, subIndex),
+                    onDrop: (e) => handleSubDrop(e),
+                    style: {
+                        marginTop: '10px',
+                        opacity: draggedSubIndex === subIndex ? 0.5 : 1,
+                        transition: 'opacity 0.2s',
+                        cursor: 'grab'
+                    }
+                },
+                createElement(
+                    PanelBody,
+                    { title: `${subField.label} (${subField.type})`, initialOpen: false, className: 'repeater-sub-field-settings' },
+                    createElement(TextControl, {
+                        label: "Sub-Field Label",
+                        value: subField.label,
+                        onChange: val => updateSubField(subIndex, 'label', val),
+                    }),
+                    createElement(TextControl, {
+                        label: "Attribute Key (Variable Name)",
+                        value: subField.key,
+                        help: "Must be unique, lowercase, and contain only letters, numbers, and underscores.",
+                        onChange: val => updateSubField(subIndex, 'key', val),
+                    }),
+                    createElement(SelectControl, {
+                        label: "Sub-Field Type",
+                        value: subField.type,
+                        options: FIELD_TYPES.map(t => ({ label: t.label, value: t.value })).filter(t => t.value !== 'repeater'),
+                        onChange: val => updateSubField(subIndex, 'type', val),
+                    }),
+                    createElement(Button, { 
+                        isDestructive: true, 
+                        onClick: () => removeSubField(subIndex),
+                        style: { marginTop: '10px' }
+                    }, 'Delete Sub-Field')
+                )
             );
         };
 
@@ -345,18 +426,30 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
             fields.map((field, index) => 
                 createElement('div', { 
                     key: index, 
+                    draggable: true,
+                    onDragStart: (e) => handleDragStart(e, index),
+                    onDragOver: (e) => handleDragOver(e, index),
+                    onDragEnter: (e) => handleDragEnter(e, index), // Trigger reorder
+                    onDrop: (e) => handleDrop(e), // Just cleanup
                     style: { 
                         padding: '10px', 
                         marginBottom: '8px', 
                         border: '1px solid #ddd',
-                        backgroundColor: selectedField === field ? '#eaf4ff' : '#fff',
-                        cursor: 'pointer',
+                        // Visual feedback for dragging
+                        backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
+                        opacity: draggedIndex === index ? 0.5 : 1,
+                        cursor: 'grab',
                         display: 'flex',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        transition: 'background-color 0.2s, opacity 0.2s'
                     },
                     onClick: () => setSelectedField(field)
                 }, 
-                createElement('span', null, `${field.label} (${field.type})`),
+                createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                    // Drag Handle Icon (Optional visual cue)
+                    createElement('span', { style: { cursor: 'grab', color: '#999', fontSize: '18px' } }, '⋮⋮'),
+                    createElement('span', null, `${field.label} (${field.type})`)
+                ),
                 // NEW: Quick-add button next to field names
                 createElement(Button, { 
                     isSmall: true, 

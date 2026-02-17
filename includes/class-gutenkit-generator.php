@@ -323,6 +323,27 @@ class GutenKit_Generator
 			} elseif ($field['type'] === 'toggle') {
 				if (!in_array('ToggleControl', $extra_imports_components))
 					$extra_imports_components[] = 'ToggleControl';
+			} elseif ($field['type'] === 'color') {
+				if (!in_array('ColorPalette', $extra_imports_components))
+					$extra_imports_components[] = 'ColorPalette';
+			} elseif (in_array($field['type'], ['date', 'datetime'])) {
+				if (!in_array('DatePicker', $extra_imports_components))
+					$extra_imports_components[] = 'DatePicker';
+			} elseif ($field['type'] === 'contentEditor') {
+				if (!in_array('RichText', $extra_imports_editor))
+					$extra_imports_editor[] = 'RichText';
+				if (!in_array('ToggleControl', $extra_imports_components))
+					$extra_imports_components[] = 'ToggleControl';
+			} elseif ($field['type'] === 'relational') {
+				if (!in_array('SelectControl', $extra_imports_components))
+					$extra_imports_components[] = 'SelectControl';
+			} elseif ($field['type'] === 'gallery') {
+				if (!in_array('MediaUpload', $extra_imports_editor))
+					$extra_imports_editor[] = 'MediaUpload';
+				if (!in_array('MediaUploadCheck', $extra_imports_editor))
+					$extra_imports_editor[] = 'MediaUploadCheck';
+				if (!in_array('Button', $extra_imports_components))
+					$extra_imports_components[] = 'Button';
 			}
 		}
 
@@ -381,6 +402,505 @@ class GutenKit_Generator
 							</div>
 						) }
 					</div>";
+					break;
+				case 'number':
+					$jsx .= "<TextControl label=\"$label\" type=\"number\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: parseFloat(val) } ) } />";
+					break;
+				case 'email':
+					$jsx .= "<TextControl label=\"$label\" type=\"email\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'url':
+					$jsx .= "<TextControl label=\"$label\" type=\"url\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'icon':
+					$jsx .= "<TextControl label=\"$label (Icon Class)\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'color':
+					$jsx .= "<p style={{ fontWeight: 'bold' }}>$label</p><ColorPalette value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'date':
+					$jsx .= "<p style={{ fontWeight: 'bold' }}>$label</p><DatePicker currentDate={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'time':
+					$jsx .= "<TextControl label=\"$label\" type=\"time\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />";
+					break;
+				case 'datetime':
+					$jsx .= "<p style={{ fontWeight: 'bold' }}>$label</p><DatePicker currentDate={ attributes.$key } onChange={ ( date ) => setAttributes( { $key: date } ) } />";
+					break;
+				case 'file':
+					$jsx .= "<div className=\"file-control\">
+						<label className=\"components-base-control__label\">$label</label>
+						<MediaUploadCheck>
+							<MediaUpload
+								onSelect={ ( media ) => setAttributes( { $key: { url: media.url, id: media.id, filename: media.filename || media.url.split('/').pop() } } ) }
+								allowedTypes={ ['application/pdf', 'application/msword', 'application/zip'] }
+								value={ attributes.$key ? attributes.$key.id : null }
+								render={ ( { open } ) => (
+									<Button onClick={ open } variant=\"secondary\">
+										{ attributes.$key ? 'Change File' : 'Select File' }
+									</Button>
+								) }
+							/>
+						</MediaUploadCheck>
+						{ attributes.$key && attributes.$key.url && (
+							<div style={{ marginTop: '10px' }}>
+								<p>Selected: { attributes.$key.filename }</p>
+								<Button isLink isDestructive onClick={ () => setAttributes( { $key: null } ) }>Remove</Button>
+							</div>
+						) }
+					</div>";
+					break;
+				case 'gallery':
+					$jsx .= "<div className=\"gallery-control\">
+						<label className=\"components-base-control__label\">$label</label>
+						<MediaUploadCheck>
+							<MediaUpload
+								onSelect={ ( media ) => setAttributes( { $key: media } ) }
+								allowedTypes={ ['image'] }
+								multiple={ true }
+								gallery={ true }
+								value={ attributes.$key ? attributes.$key.map( item => item.id ) : [] }
+								render={ ( { open } ) => (
+									<Button onClick={ open } variant=\"primary\">
+										{ attributes.$key && attributes.$key.length > 0 ? 'Edit Gallery' : 'Create Gallery' }
+									</Button>
+								) }
+							/>
+						</MediaUploadCheck>
+						{ attributes.$key && (
+							<div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+								{ attributes.$key.map( ( img, i ) => (
+									<img key={ i } src={ img.url } style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
+								) ) }
+							</div>
+						) }
+					</div>";
+					break;
+				case 'button':
+					$jsx .= "<div className=\"button-control-group\">
+						<p style={{ fontWeight: 'bold' }}>$label</p>
+						<TextControl label=\"Button Text\" value={ attributes.$key?.text || '' } onChange={ ( val ) => setAttributes( { $key: { ...attributes.$key, text: val } } ) } />
+						<TextControl label=\"Button URL\" value={ attributes.$key?.url || '' } onChange={ ( val ) => setAttributes( { $key: { ...attributes.$key, url: val } } ) } />
+					</div>";
+					break;
+				case 'contentEditor':
+					// Using a toggle to switch between rich text and HTML view if needed, 
+					// but here we just render toggle + basic logic. 
+					// For simplicity in PHP generator, we might just use a Textarea for HTML mode and RichText for visual.
+					$htmlMode = "is_html_mode_$key";
+					$jsx .= "<div className=\"content-editor-control\">
+						<ToggleControl
+							label=\"Enable HTML Mode\"
+							checked={ attributes.$htmlMode }
+							onChange={ ( val ) => setAttributes( { $htmlMode: val } ) }
+						/>
+						{ attributes.$htmlMode ? (
+							<TextareaControl label=\"$label (HTML)\" value={ attributes.$key } onChange={ ( val ) => setAttributes( { $key: val } ) } />
+						) : (
+							<div style={{ border: '1px solid #ccc', padding: '10px' }}>
+								<label className=\"components-base-control__label\">$label</label>
+								<RichText
+									tagName=\"div\"
+									value={ attributes.$key }
+									onChange={ ( val ) => setAttributes( { $key: val } ) }
+								/>
+							</div>
+						) }
+					</div>";
+					break;
+				case 'relational':
+					$jsx .= "<SelectControl 
+						label=\"$label (Post ID)\"
+						value={ attributes.$key }
+						options={ [ { label: 'Select Post...', value: '' } ] }
+						onChange={ ( val ) => setAttributes( { $key: val } ) }
+						help=\"Dynamic post loading require custom JS hook.\"
+					/>";
+					break;
+				case 'repeater':
+					$subFields = isset($field['subFields']) ? $field['subFields'] : [];
+
+					// Helper function for inner controls - simplified for PHP generator
+					// Note:Ideally this should match the JS generator's full capability.
+					// For now, we inline a basic version or call a helper.
+					$inner_jsx = "";
+					foreach ($subFields as $subField) {
+						$sKey = $subField['key'];
+						$sLabel = $subField['label'];
+						$sType = $subField['type'];
+
+						switch ($sType) {
+							case 'textarea':
+								$inner_jsx .= "
+									<TextareaControl 
+										label=\"$sLabel\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+							case 'range':
+								$inner_jsx .= "
+									<RangeControl 
+										label=\"$sLabel\"
+										value={ item.$sKey }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+										min={ 0 }
+										max={ 100 }
+									/>
+								";
+								break;
+							case 'number':
+								$inner_jsx .= "
+									<TextControl 
+										label=\"$sLabel\"
+										type=\"number\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: parseFloat(val) };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+							case 'email':
+								$inner_jsx .= "
+									<TextControl 
+										label=\"$sLabel\"
+										type=\"email\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+							case 'url':
+								$inner_jsx .= "
+									<TextControl 
+										label=\"$sLabel\"
+										type=\"url\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+							case 'icon':
+								$inner_jsx .= "
+									<TextControl 
+										label=\"$sLabel (Icon Class)\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+							case 'color':
+								$inner_jsx .= "
+									<div className=\"color-control-wrapper\" style={{ marginTop: '10px' }}>
+										<p style={{ fontWeight: 'bold', marginBottom: '5px' }}>$sLabel</p>
+										<ColorPalette 
+											value={ item.$sKey } 
+											onChange={ ( val ) => {
+												const newItems = [...attributes.$key];
+												newItems[index] = { ...item, $sKey: val };
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+									</div>
+								";
+								break;
+							case 'date':
+								$inner_jsx .= "
+									<div className=\"date-control-wrapper\" style={{ marginTop: '10px' }}>
+										<p style={{ fontWeight: 'bold', marginBottom: '5px' }}>$sLabel</p>
+										<DatePicker 
+											currentDate={ item.$sKey } 
+											onChange={ ( val ) => {
+												const newItems = [...attributes.$key];
+												newItems[index] = { ...item, $sKey: val };
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+									</div>
+								";
+								break;
+							case 'time':
+								$inner_jsx .= "
+									<TextControl 
+										label=\"$sLabel\"
+										type=\"time\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+							case 'datetime':
+								$inner_jsx .= "
+									<div className=\"datetime-control-wrapper\" style={{ marginTop: '10px' }}>
+										<p style={{ fontWeight: 'bold', marginBottom: '5px' }}>$sLabel</p>
+										<DatePicker 
+											currentDate={ item.$sKey } 
+											onChange={ ( date ) => {
+												const newItems = [...attributes.$key];
+												newItems[index] = { ...item, $sKey: date };
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+									</div>
+								";
+								break;
+							case 'image':
+								$inner_jsx .= "
+									<div className=\"media-control-wrapper\" style={{ marginTop: '10px' }}>
+										<label className=\"components-base-control__label\">$sLabel</label>
+										<MediaUploadCheck>
+											<MediaUpload
+												onSelect={ ( media ) => {
+													const newItems = [...attributes.$key];
+													newItems[index] = { ...item, $sKey: { url: media.url, id: media.id, alt: media.alt } };
+													setAttributes({ $key: newItems });
+												}}
+												allowedTypes={ ['image'] }
+												value={ item.$sKey ? item.$sKey.id : null }
+												render={ ( { open } ) => (
+													<Button onClick={ open } variant=\"secondary\">
+														{ item.$sKey ? 'Change Image' : 'Select Image' }
+													</Button>
+												) }
+											/>
+										</MediaUploadCheck>
+										{ item.$sKey && item.$sKey.url && (
+											<img src={ item.$sKey.url } style={{ maxWidth: '50px', display: 'block', marginTop: '5px' }} alt={ item.$sKey.alt } />
+										)}
+									</div>
+								";
+								break;
+							case 'file':
+								$inner_jsx .= "
+									<div className=\"file-control-wrapper\" style={{ marginTop: '10px' }}>
+										<label className=\"components-base-control__label\">$sLabel</label>
+										<MediaUploadCheck>
+											<MediaUpload
+												onSelect={ ( media ) => {
+													const newItems = [...attributes.$key];
+													newItems[index] = { ...item, $sKey: { url: media.url, id: media.id, filename: media.filename || media.url.split('/').pop() } };
+													setAttributes({ $key: newItems });
+												}}
+												allowedTypes={ ['application/pdf', 'application/msword', 'application/zip'] }
+												value={ item.$sKey ? item.$sKey.id : null }
+												render={ ( { open } ) => (
+													<Button onClick={ open } variant=\"secondary\">
+														{ item.$sKey ? 'Change File' : 'Select File' }
+													</Button>
+												) }
+											/>
+										</MediaUploadCheck>
+										{ item.$sKey && item.$sKey.url && (
+											<div style={{ marginTop: '5px', fontSize: '12px' }}>
+												Selected: { item.$sKey.filename }
+												<br/>
+												<Button isLink isDestructive onClick={ () => {
+													const newItems = [...attributes.$key];
+													newItems[index] = { ...item, $sKey: null };
+													setAttributes({ $key: newItems });
+												}}>Remove</Button>
+											</div>
+										)}
+									</div>
+								";
+								break;
+							case 'gallery':
+								$inner_jsx .= "
+									<div className=\"gallery-control-wrapper\" style={{ marginTop: '10px' }}>
+										<label className=\"components-base-control__label\">$sLabel</label>
+										<MediaUploadCheck>
+											<MediaUpload
+												onSelect={ ( media ) => {
+													const newItems = [...attributes.$key];
+													newItems[index] = { ...item, $sKey: media };
+													setAttributes({ $key: newItems });
+												}}
+												allowedTypes={ ['image'] }
+												multiple={ true }
+												gallery={ true }
+												value={ item.$sKey ? item.$sKey.map( i => i.id ) : [] }
+												render={ ( { open } ) => (
+													<Button onClick={ open } variant=\"primary\" isSmall>
+														{ item.$sKey && item.$sKey.length > 0 ? 'Edit Gallery' : 'Create Gallery' }
+													</Button>
+												) }
+											/>
+										</MediaUploadCheck>
+										{ item.$sKey && (
+											<div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+												{ item.$sKey.map( ( img, i ) => (
+													<img key={ i } src={ img.url } style={{ width: '30px', height: '30px', objectFit: 'cover' }} />
+												) ) }
+											</div>
+										) }
+									</div>
+								";
+								break;
+							case 'button':
+								$inner_jsx .= "
+									<div className=\"button-control-group\" style={{ marginTop: '10px', padding: '5px', border: '1px dashed #ddd' }}>
+										<p style={{ fontWeight: 'bold', fontSize: '12px' }}>$sLabel</p>
+										<TextControl 
+											label=\"Text\" 
+											value={ item.$sKey?.text || '' } 
+											onChange={ ( val ) => {
+												const newItems = [...attributes.$key];
+												const currentBtn = item.$sKey || {};
+												newItems[index] = { ...item, $sKey: { ...currentBtn, text: val } };
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+										<TextControl 
+											label=\"URL\" 
+											value={ item.$sKey?.url || '' } 
+											onChange={ ( val ) => {
+												const newItems = [...attributes.$key];
+												const currentBtn = item.$sKey || {};
+												newItems[index] = { ...item, $sKey: { ...currentBtn, url: val } };
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+									</div>
+								";
+								break;
+							case 'contentEditor':
+								// Simplified content editor for repeater (no toggle to keep it clean, just HTML/Textarea or RichText)
+								// RichText inside repeater can be tricky with focus, using Textarea or TextControl is safer for simple usage.
+								// Or implementing RichText with care. Let's use RichText but be aware of potential focus issues.
+								// Actually, let's stick to Textarea for HTML/Shortcode support or simple RichText.
+								$inner_jsx .= "
+									<div className=\"content-editor-wrapper\" style={{ marginTop: '10px' }}>
+										<label className=\"components-base-control__label\">$sLabel</label>
+										<RichText
+											tagName=\"div\"
+											value={ item.$sKey || '' }
+											onChange={ ( val ) => {
+												const newItems = [...attributes.$key];
+												newItems[index] = { ...item, $sKey: val };
+												setAttributes({ $key: newItems });
+											}}
+											placeholder=\"Enter content...\"
+											style={{ border: '1px solid #ccc', padding: '5px', minHeight: '60px' }}
+										/>
+									</div>
+								";
+								break;
+							case 'relational':
+								$inner_jsx .= "
+									<SelectControl 
+										label=\"$sLabel (Post ID)\"
+										value={ item.$sKey }
+										options={ [ { label: 'Select Post...', value: '' } ] }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+										help=\"Dynamic post loading require custom JS hook.\"
+									/>
+								";
+								break;
+							default:
+								// Text
+								$inner_jsx .= "
+									<TextControl 
+										label=\"$sLabel\"
+										value={ item.$sKey || '' }
+										onChange={ ( val ) => {
+											const newItems = [...attributes.$key];
+											newItems[index] = { ...item, $sKey: val };
+											setAttributes({ $key: newItems });
+										}}
+									/>
+								";
+								break;
+						}
+
+					}
+
+					$jsx .= "
+						<br />
+						<label className=\"components-base-control__label\">$label</label>
+						{ ( attributes.$key || [] ).map( ( item, index ) => (
+							<div key={ index } className=\"gutenkit-repeater-item\" style={{ padding: '15px', border: '1px solid #e0e0e0', marginBottom: '15px', borderRadius: '4px', background: '#f8f9fa' }}>
+								<div style={{ marginBottom: '15px', fontWeight: 'bold', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Item { index + 1 }</div>
+								$inner_jsx
+								<div className=\"gutenkit-repeater-controls\" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
+									<div className=\"gutenkit-repeater-move-controls\">
+										<Button 
+											icon=\"arrow-up-alt2\" 
+											label=\"Move Up\"
+											isSmall
+											variant=\"secondary\"
+											disabled={ index === 0 }
+											onClick={ () => {
+												const newItems = [...attributes.$key];
+												const temp = newItems[index];
+												newItems[index] = newItems[index - 1];
+												newItems[index - 1] = temp;
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+										<Button 
+											icon=\"arrow-down-alt2\" 
+											label=\"Move Down\"
+											isSmall
+											variant=\"secondary\"
+											disabled={ index === attributes.$key.length - 1 }
+											style={{ marginLeft: '5px' }}
+											onClick={ () => {
+												const newItems = [...attributes.$key];
+												const temp = newItems[index];
+												newItems[index] = newItems[index + 1];
+												newItems[index + 1] = temp;
+												setAttributes({ $key: newItems });
+											}} 
+										/>
+									</div>
+									<Button isDestructive variant=\"link\" isSmall onClick={ () => {
+										const newItems = attributes.$key.filter( ( _, i ) => i !== index );
+										setAttributes( { $key: newItems } );
+									} }>
+										Remove Item
+									</Button>
+								</div>
+							</div>
+						) ) }
+						<Button variant=\"primary\" onClick={ () => {
+							const newItems = [ ...( attributes.$key || [] ), {} ];
+							setAttributes( { $key: newItems } );
+						} }>
+							Add New Item
+						</Button>
+					";
 					break;
 				default:
 					// Fallback for types not strictly handled yet
