@@ -927,26 +927,65 @@ class GutenKit_Generator
 		// Escape backticks in the template because we will wrap it in backticks for JS
 		$js_safe_template = str_replace('`', '\`', $template);
 
+		// 1. Handle Repeater Loops: {{#repeaterName}} content {{/repeaterName}}
+		// Find all repeater fields first to know their structure
+		$repeater_fields = [];
+		foreach ($fields as $field) {
+			if ($field['type'] === 'repeater') {
+				$repeater_fields[$field['key']] = $field; // Store full field config including subFields
+			}
+		}
+
+		// Regex to find loops
+		// Matches {{#key}} ... {{/key}}
+		// format: {{#key}} content {{/key}}
+		$js_safe_template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields) {
+			$repeater_key = $matches[1];
+			$inner_content = $matches[2];
+
+			// Check if this repeater exists in our config
+			if (!isset($repeater_fields[$repeater_key])) {
+				return $matches[0]; // Return original if not found
+			}
+
+			$sub_fields = $repeater_fields[$repeater_key]['subFields'] ?? [];
+
+			// Process inner content for subfields
+			foreach ($sub_fields as $sub_field) {
+				$sKey = $sub_field['key'];
+				$sType = $sub_field['type'];
+
+				// Determine replacement based on type
+				// Inside the map, 'item' is the current object
+				if ($sType === 'image' || $sType === 'file') {
+					$replacement = "\${item.$sKey?.url || ''}";
+				} else {
+					$replacement = "\${item.$sKey || ''}";
+				}
+
+				// Replace {{subkey}} with ${item.subkey}
+				$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey, '/') . '\s*\}\}/', $replacement, $inner_content);
+			}
+
+			// Wrap in map
+			// attributes.$repeater_key && attributes.$repeater_key.map((item, index) => ` ... `).join('')
+			// Note: We use \` for the inner backticks because this whole string is inside a PHP double-quoted string.
+			// The final JS output needs to look like: ${ attributes.key && attributes.key.map(...) }
+			return "\${ attributes.$repeater_key && attributes.$repeater_key.map((item, index) => `$inner_content`).join('') }";
+		}, $js_safe_template);
+
+
+		// 2. Handle Top-Level Fields
 		foreach ($fields as $field) {
 			$key = $field['key'];
 			$type = $field['type'];
 
-			// For images, attributes.key is an object {url, alt, id}. 
-			// The user uses {{key}} in HTML. We should probably expect them to use it in src=""
-			// OR we can try to be smart.
-			// Simple approach: Replace {{key}} with ${attributes.key} and let the user handle sub-properties if complex?
-			// User request says "call the created fields data in that textarea itself".
-			// If they have an image field "hero_image", attributes.hero_image is an object.
-			// The HTML might be <img src="{{hero_image}}">.
-			// If we replace {{hero_image}} with ${attributes.hero_image}, it prints [object Object].
-			// So for image types, we might want to flatten or guide them.
-			// BUT, for text it's easy.
-
-			// Let's assume for now simple text replacement.
-			// Only special handling: if attributes.key is undefined/null, show empty string to avoid "undefined" in preview.
+			// Skip if it's a repeater that we might have already processed (or don't want to replace top-level)
+			if ($type === 'repeater')
+				continue;
 
 			if ($type === 'image' || $type === 'file') {
-				// We'll replace {{key}} with ${attributes.key?.url || ''}
+				// We'll replace {{key}} with ${attributes.$key?.url || ''}
 				$replacement = "\${attributes.$key?.url || ''}";
 			} else {
 				$replacement = "\${attributes.$key || ''}";
@@ -966,9 +1005,71 @@ class GutenKit_Generator
 		$fields = $config['fields'];
 		$block_dir = BLOCKS_BASE_PATH . $slug;
 
+		// 1. Handle Repeater Loops: {{#repeaterName}} content {{/repeaterName}}
+		// Find all repeater fields first
+		$repeater_fields = [];
+		foreach ($fields as $field) {
+			if ($field['type'] === 'repeater') {
+				$repeater_fields[$field['key']] = $field;
+			}
+		}
+
+		// Regex to find loops
+		// Matches {{#key}} ... {{/key}}
+		$template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields) {
+			$repeater_key = $matches[1];
+			$inner_content = $matches[2];
+
+			// Check if this repeater exists
+			if (!isset($repeater_fields[$repeater_key])) {
+				return $matches[0];
+			}
+
+			$sub_fields = $repeater_fields[$repeater_key]['subFields'] ?? [];
+
+			// Process inner content for subfields
+			foreach ($sub_fields as $sub_field) {
+				$sKey = $sub_field['key'];
+				$sType = $sub_field['type'];
+				$php_replacement = '';
+
+				// Inside the loop, we use $item['key']
+				// Need to handle types similar to top-level
+				switch ($sType) {
+					case 'image':
+					case 'file':
+						$php_replacement = "<?php echo esc_url(\$item['$sKey']['url'] ?? ''); ?>";
+						break;
+					default:
+						$php_replacement = "<?php echo wp_kses_post(\$item['$sKey'] ?? ''); ?>";
+						break;
+				}
+
+				// Replace {{subkey}} with PHP code
+				$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey, '/') . '\s*\}\}/', $php_replacement, $inner_content);
+			}
+
+			// Wrap in PHP loop
+			// Check if attributes[key] exists and is array, then loop
+			$loop_start = "<?php if(!empty(\$attributes['$repeater_key']) && is_array(\$attributes['$repeater_key'])): ?>\n";
+			$loop_start .= "<?php foreach(\$attributes['$repeater_key'] as \$item): ?>";
+			$loop_end = "<?php endforeach; ?>\n<?php endif; ?>";
+
+			return $loop_start . $inner_content . $loop_end;
+
+		}, $template);
+
+
+		// 2. Handle Top-Level Fields
 		foreach ($fields as $field) {
 			$key = $field['key'];
 			$type = $field['type'];
+
+			// Skip repeater fields in top-level replacement if handled above? 
+			// Actually, if the user didn't use the Loop syntax but used {{repeater}}, we optionally fallback or leave it.
+			// Existing code handled {{repeater}} by printing nothing or a loop comment.
+			// Let's keep existing switch as fallback for non-loop usages of {{key}}.
+
 			$php = '';
 
 			switch ($type) {
@@ -981,12 +1082,15 @@ class GutenKit_Generator
 					$php = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?><div class=\"custom-gallery\"><?php foreach(\$attributes['$key'] as \$item): ?><img src=\"<?php echo esc_url(\$item['url']); ?>\" /><?php endforeach; ?></div><?php endif; ?>";
 					break;
 				case 'repeater':
+					// Fallback for {{repeater}} without loop syntax
 					$php = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?><?php foreach(\$attributes['$key'] as \$item): ?><!-- Loop --> <?php endforeach; ?><?php endif; ?>";
 					break;
 				default:
 					$php = "<?php echo wp_kses_post(\$attributes['$key'] ?? ''); ?>";
 					break;
 			}
+
+			// Replace {{key}}
 			$template = str_replace('{{' . $key . '}}', $php, $template);
 		}
 
