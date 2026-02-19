@@ -92,6 +92,7 @@ const FIELD_TYPES = [{
 const slugifyKey = (value) => value.toLowerCase().replace(/[^a-z0-9_]/g, '');
 
 // --- 1. The Main Application Component ---
+// --- 1. The Main Application Component ---
 const ComponentEditorApp = ({
     initialConfig,
     blockSlug
@@ -104,6 +105,9 @@ const ComponentEditorApp = ({
     const [template, setTemplate] = useState(initialConfig.template || '');
     const [css, setCss] = useState(initialConfig.css || ''); // NEW: CSS State
 
+    // WIZARD STATE: 0 = Structure, 1 = Template & Build
+    const [step, setStep] = useState(0);
+
     // --- Drag and Drop State ---
     const [draggedIndex, setDraggedIndex] = useState(null);
     const [draggedSubIndex, setDraggedSubIndex] = useState(null); // NEW: Sub-field drag state
@@ -112,8 +116,6 @@ const ComponentEditorApp = ({
     const handleDragStart = (e, index) => {
         setDraggedIndex(index);
         e.dataTransfer.effectAllowed = "move";
-        // FIX: Let browser handle drag image default, or set it explicitly to the target
-        // e.dataTransfer.setDragImage(e.target.parentNode, 20, 20); // REMOVED CAUSE OF GHOSTING
     };
 
     const handleDragOver = (e, index) => {
@@ -128,7 +130,6 @@ const ComponentEditorApp = ({
         const item = newFields[draggedIndex];
 
         // Retrieve item at draggedIndex and move it to targetIndex
-        // Simple swap logic for smoother visual update
         newFields.splice(draggedIndex, 1);
         newFields.splice(targetIndex, 0, item);
 
@@ -182,6 +183,8 @@ const ComponentEditorApp = ({
     // Helper to insert tags like {{field_key}} at cursor position
     const insertTagAtCursor = (key) => {
         const textarea = document.getElementById('bf-html-template-area');
+        if (!textarea) return; // Guard
+
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         const text = textarea.value;
@@ -196,7 +199,7 @@ const ComponentEditorApp = ({
             textarea.setSelectionRange(start + tag.length, start + tag.length);
         }, 10);
     };
-    // --- AJAX Save Handler ---
+
     // --- AJAX Build Trigger ---
     const triggerBuild = () => {
         jQuery.post(ajaxurl, {
@@ -221,10 +224,11 @@ const ComponentEditorApp = ({
     // --- Cheat Sheet State ---
     const [cheatSheet, setCheatSheet] = useState(null);
 
-    const handleSave = () => {
+    // Save Handling (Supports "Save & Next" and "Save & Build")
+    const handleSave = (shouldBuild = false, nextStep = null) => {
         setIsSaving(true);
-        setMessage('Saving structure...');
-        setCheatSheet(null); // Reset
+        setMessage(shouldBuild ? 'Saving & Building...' : 'Saving Structure...');
+        setCheatSheet(null); // Reset to ensure we get fresh one
 
         const data = {
             action: 'block_factory_save_structure',
@@ -240,12 +244,21 @@ const ComponentEditorApp = ({
         jQuery.post(ajaxurl, data)
             .done(response => {
                 if (response.success) {
-                    setMessage('✅ Structure saved! Starting build...');
                     // Capture Cheat Sheet Content
                     if (response.data.cheat_sheet) {
                         setCheatSheet(response.data.cheat_sheet);
                     }
-                    triggerBuild(); // Auto-trigger build
+
+                    if (shouldBuild) {
+                        setMessage('✅ Saved! Starting build...');
+                        triggerBuild(); // Auto-trigger build
+                    } else {
+                        setMessage('✅ Structure Saved.');
+                        setIsSaving(false);
+                        if (nextStep !== null) {
+                            setStep(nextStep);
+                        }
+                    }
                 } else {
                     setMessage(`❌ Error: ${response.data.message}`);
                     setIsSaving(false);
@@ -386,7 +399,6 @@ const ComponentEditorApp = ({
                 title: 'Repeater Sub-Fields',
                 initialOpen: true
             },
-
             // 1. Add New Sub-Field Palette
             createElement('h4', null, 'Add New Sub-Field'),
             createElement('div', {
@@ -404,7 +416,6 @@ const ComponentEditorApp = ({
                     }, type.label)
                 )
             ),
-
             // 2. List of Existing Sub-Fields
             createElement('h4', null, `Current Sub-Fields (${subFields.length})`),
             subFields.length > 0 ?
@@ -414,341 +425,362 @@ const ComponentEditorApp = ({
     };
 
     // --- Render the Field Settings Panel ---
-    // const renderSettings = () => {
-    //     if (!selectedField) return <p>Select a field on the left to edit its properties.</p>;
-    //     
-    //     const index = fields.indexOf(selectedField);
-    //
-    //     return (
-    //         <Panel header="Field Settings">
-    //             <PanelBody title={`Editing: ${selectedField.label} (${selectedField.type})`} initialOpen={true}>
-    //                 <TextControl
-    //                     label="Field Label"
-    //                     value={selectedField.label}
-    //                     onChange={val => updateField(index, 'label', val)}
-    //                 />
-    //                 <TextControl
-    //                     label="Attribute Key (Variable Name)"
-    //                     value={selectedField.key}
-    //                     help="Must be unique, lowercase, and contain only letters, numbers, and underscores."
-    //                     onChange={val => updateField(index, 'key', val)}
-    //                 />
-    //                 <TextControl
-    //                     label="Default Value (Optional)"
-    //                     value={selectedField.default}
-    //                     onChange={val => updateField(index, 'default', val)}
-    //                 />
-    //                 <Button 
-    //                     isDestructive 
-    //                     onClick={() => removeField(index)} 
-    //                     style={{marginTop: '10px'}}
-    //                 >
-    //                     Delete Field
-    //                 </Button>
-    //             </PanelBody>
-    //         </Panel>
-    //     );
-    // };
-    // --- Render the Field Settings Panel ---
-    const renderSettings = () => { // <--- THIS FUNCTION IS REPLACED
-        if (!selectedField) return <p > Select a field on the left to edit its properties. < /p>;
+    const renderSettings = () => {
+        if (!selectedField) return createElement('p', {
+            style: {
+                padding: '20px',
+                color: '#666',
+                fontStyle: 'italic',
+                border: '1px dashed #ccc',
+                marginTop: '20px'
+            }
+        }, 'Select a field on the left to edit its settings.');
 
         const index = fields.indexOf(selectedField);
 
-        return ( <
-            Panel header = "Field Settings" > {
-                /* Standard Settings (Label, Key, Default, Delete) */
-            } <
-            PanelBody title = {
-                `Editing: ${selectedField.label} (${selectedField.type})`
-            }
-            initialOpen = {
-                true
-            } >
-            <
-            TextControl label = "Field Label"
-            value = {
-                selectedField.label
-            }
-            onChange = {
-                val => updateField(index, 'label', val)
-            }
-            /> <
-            TextControl label = "Attribute Key (Variable Name)"
-            value = {
-                selectedField.key
-            }
-            help = "Must be unique, lowercase, and contain only letters, numbers, and underscores."
-            onChange = {
-                val => updateField(index, 'key', val)
-            }
-            /> <
-            TextControl label = "Default Value (Optional)"
-            value = {
-                selectedField.default
-            }
-            onChange = {
-                val => updateField(index, 'default', val)
-            }
-            /> <
-            Button isDestructive onClick = {
-                () => removeField(index)
-            }
-            style = {
-                {
-                    marginTop: '10px'
-                }
-            } >
-            Delete Field <
-            /Button> < /
-            PanelBody >
+        return createElement(
+            Panel, {
+                header: "Field Settings"
+            },
+            createElement(
+                PanelBody, {
+                    title: `Editing: ${selectedField.label} (${selectedField.type})`,
+                    initialOpen: true
+                },
+                createElement(TextControl, {
+                    label: "Field Label",
+                    value: selectedField.label,
+                    onChange: val => updateField(index, 'label', val)
+                }),
+                createElement(TextControl, {
+                    label: "Attribute Key (Variable Name)",
+                    value: selectedField.key,
+                    help: "Must be unique, lowercase, and contain only letters, numbers, and underscores.",
+                    onChange: val => updateField(index, 'key', val)
+                }),
+                createElement(TextControl, {
+                    label: "Default Value (Optional)",
+                    value: selectedField.default,
+                    onChange: val => updateField(index, 'default', val)
+                }),
+                createElement(Button, {
+                    isDestructive: true,
+                    onClick: () => removeField(index),
+                    style: {
+                        marginTop: '10px'
+                    }
+                }, 'Delete Field')
+            ),
 
-            {
-                /* CONDITIONALLY RENDER REPEATER SUB-FIELDS SETTINGS */
-            } {
-                selectedField.type === 'repeater' &&
-                    renderRepeaterSettings(selectedField, index, updateField, removeField)
-            } <
-            /Panel>
+            // CONDITIONAL REPEATER SETTINGS
+            selectedField.type === 'repeater' && renderRepeaterSettings(selectedField, index, updateField, removeField)
         );
     };
 
 
-    return createElement(
-        'div', {
-            style: {
-                display: 'flex',
-                gap: '20px',
-                marginTop: '20px'
-            }
-        },
-
-        // --- Left Column: Component Palette ---
-        createElement(
+    // ==========================================
+    // RENDER: STEP 1 - STRUCTURE
+    // ==========================================
+    if (step === 0) {
+        return createElement(
             'div', {
-                style: {
-                    width: '20%',
-                    borderRight: '1px solid #ccc',
-                    paddingRight: '20px'
-                }
-            },
-            createElement('h3', null, 'Component Palette'),
-            FIELD_TYPES.map(type =>
-                createElement(Button, {
-                    isSecondary: true,
-                    style: {
-                        display: 'block',
-                        width: '100%',
-                        marginBottom: '10px'
-                    },
-                    onClick: () => addField(type.value)
-                }, type.label)
-            )
-        ),
-
-        // --- Middle Column: Component Structure (The Fields List) ---
-        createElement(
-            'div', {
-                style: {
-                    width: '40%'
-                }
-            },
-            createElement(TabPanel, {
-                    className: "bf-editor-tabs",
-                    activeClass: "is-active-tab",
-                    tabs: [{
-                            name: 'structure',
-                            title: '1. Structure',
-                            className: 'bf-tab-structure'
-                        },
-                        {
-                            name: 'template',
-                            title: '2. Template & Style',
-                            className: 'bf-tab-template'
-                        },
-                    ]
-                },
-                (tab) => {
-                    if (tab.name === 'structure') {
-                        return createElement('div', {
-                                style: {
-                                    marginTop: '20px'
-                                }
-                            },
-                            createElement('h3', null, 'Block Fields'),
-
-                            // Render the list of fields
-                            fields.map((field, index) =>
-                                createElement('div', {
-                                        key: index,
-                                        draggable: true,
-                                        onDragStart: (e) => handleDragStart(e, index),
-                                        onDragOver: (e) => handleDragOver(e, index),
-                                        onDragEnter: (e) => handleDragEnter(e, index), // Trigger reorder
-                                        onDrop: (e) => handleDrop(e), // Just cleanup
-                                        style: {
-                                            padding: '10px',
-                                            marginBottom: '8px',
-                                            border: '1px solid #ddd',
-                                            // Visual feedback for dragging
-                                            backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
-                                            opacity: draggedIndex === index ? 0.5 : 1,
-                                            cursor: 'grab',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            transition: 'background-color 0.2s, opacity 0.2s'
-                                        },
-                                        onClick: () => setSelectedField(field)
-                                    },
-                                    createElement('div', {
-                                            style: {
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '8px'
-                                            }
-                                        },
-                                        // Drag Handle Icon (Optional visual cue)
-                                        createElement('span', {
-                                            style: {
-                                                cursor: 'grab',
-                                                color: '#999',
-                                                fontSize: '18px'
-                                            }
-                                        }, '⋮⋮'),
-                                        createElement('span', null, `${field.label} (${field.type})`)
-                                    ),
-                                    // NEW: Quick-add button next to field names
-                                    createElement(Button, {
-                                        isSmall: true,
-                                        isTertiary: true,
-                                        onClick: (e) => {
-                                            e.stopPropagation();
-                                            insertTagAtCursor(field.key);
-                                        }
-                                    }, 'Add to HTML')
-                                )
-                            ),
-                            fields.length === 0 && createElement('p', {
-                                style: {
-                                    fontStyle: 'italic',
-                                    color: '#777'
-                                }
-                            }, 'No fields yet. Add one from the Component Palette.')
-                        );
-                    } else if (tab.name === 'template') {
-                        return createElement('div', {
-                                style: {
-                                    marginTop: '20px'
-                                }
-                            },
-                            // --- CHEAT SHEET (Moved Here) ---
-                            cheatSheet && createElement(
-                                PanelBody, {
-                                    title: 'Template Snippets (Cheat Sheet)',
-                                    initialOpen: true,
-                                    style: {
-                                        marginBottom: '20px',
-                                        background: '#f8f9fa',
-                                        border: '1px solid #ddd'
-                                    }
-                                },
-                                createElement('div', {
-                                    dangerouslySetInnerHTML: {
-                                        __html: cheatSheet
-                                    },
-                                    style: {
-                                        fontSize: '12px',
-                                        lineHeight: '1.5',
-                                        maxHeight: '200px',
-                                        overflowY: 'auto'
-                                    }
-                                })
-                            ),
-
-                            // --- HTML TEMPLATE EDITOR ---
-                            createElement('h3', null, 'HTML Template'),
-                            createElement('p', {
-                                    style: {
-                                        fontSize: '12px',
-                                        color: '#666'
-                                    }
-                                },
-                                'Write your HTML below. Click the "Add to HTML" buttons in the Structure tab to insert keys.'
-                            ),
-
-                            createElement('textarea', {
-                                id: 'bf-html-template-area',
-                                value: template,
-                                onChange: (e) => setTemplate(e.target.value),
-                                style: {
-                                    width: '100%',
-                                    minHeight: '250px',
-                                    fontFamily: 'monospace',
-                                    padding: '12px',
-                                    fontSize: '13px',
-                                    border: '1px solid #757575',
-                                    borderRadius: '4px'
-                                },
-                                placeholder: `<div class="banner">\n  <h2>{{${fields[0]?.key || 'field_key'}}}</h2>\n</div>`
-                            }),
-                            createElement('hr', {
-                                style: {
-                                    margin: '20px 0'
-                                }
-                            }),
-
-                            // --- CSS EDITOR ---
-                            createElement('h3', null, 'CSS Styles'),
-                            createElement('textarea', {
-                                value: css,
-                                onChange: (e) => setCss(e.target.value),
-                                style: {
-                                    width: '100%',
-                                    minHeight: '150px',
-                                    fontFamily: 'monospace',
-                                    padding: '12px',
-                                    fontSize: '13px',
-                                    border: '1px solid #757575',
-                                    borderRadius: '4px'
-                                },
-                                placeholder: `.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}`
-                            })
-                        );
-                    }
-                }
-            ),
-
-            createElement('hr', null),
-
-            // Save Button and Messages
-            createElement(Button, {
-                isPrimary: true,
-                isBusy: isSaving,
-                onClick: () => handleSave(),
-                disabled: isSaving,
                 style: {
                     marginTop: '20px'
                 }
-            }, isSaving ? 'Compiling Code...' : 'Save Structure & Build Block'),
+            },
+            // Progress Indicator
+            createElement('div', {
+                    style: {
+                        marginBottom: '20px',
+                        padding: '10px',
+                        background: '#e5e5e5',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }
+                },
+                createElement('h2', {
+                    style: {
+                        margin: 0
+                    }
+                }, 'Step 1: Define Block Structure'),
+                createElement('div', null,
+                    createElement(Button, {
+                        isPrimary: true,
+                        isBusy: isSaving,
+                        onClick: () => handleSave(false, 1)
+                    }, 'Next: Edit Template >') // Save & Go Next
+                )
+            ),
 
-            message && createElement('p', {
+            createElement(
+                'div', {
+                    style: {
+                        display: 'flex',
+                        gap: '20px',
+                    }
+                },
+                // --- Left: Palette ---
+                createElement(
+                    'div', {
+                        style: {
+                            width: '20%',
+                            borderRight: '1px solid #ccc',
+                            paddingRight: '20px'
+                        }
+                    },
+                    createElement('h3', null, 'Add Fields'),
+                    FIELD_TYPES.map(type =>
+                        createElement(Button, {
+                            isSecondary: true,
+                            style: {
+                                display: 'block',
+                                width: '100%',
+                                marginBottom: '10px'
+                            },
+                            onClick: () => addField(type.value)
+                        }, type.label)
+                    )
+                ),
+                // --- Middle: Field List ---
+                createElement(
+                    'div', {
+                        style: {
+                            width: '40%'
+                        }
+                    },
+                    createElement('h3', null, 'Block Fields'),
+                    fields.length === 0 && createElement('p', {
+                        style: {
+                            fontStyle: 'italic',
+                            color: '#777'
+                        }
+                    }, 'No fields added. Click a field type on the left to begin.'),
+
+                    fields.map((field, index) =>
+                        createElement('div', {
+                                key: index,
+                                draggable: true,
+                                onDragStart: (e) => handleDragStart(e, index),
+                                onDragOver: (e) => handleDragOver(e, index),
+                                onDragEnter: (e) => handleDragEnter(e, index),
+                                onDrop: (e) => handleDrop(e),
+                                style: {
+                                    padding: '10px',
+                                    marginBottom: '8px',
+                                    border: '1px solid #ddd',
+                                    backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
+                                    opacity: draggedIndex === index ? 0.5 : 1,
+                                    cursor: 'grab',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center', // Center vertically
+                                    transition: 'all 0.2s',
+                                    borderLeft: selectedField === field ? '4px solid #007cba' : '1px solid #ddd'
+                                },
+                                onClick: () => setSelectedField(field)
+                            },
+                            createElement('div', {
+                                    style: {
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px'
+                                    }
+                                },
+                                createElement('span', {
+                                    style: {
+                                        cursor: 'grab',
+                                        color: '#ccc',
+                                        fontSize: '18px'
+                                    }
+                                }, '⋮⋮'),
+                                createElement('span', {
+                                    style: {
+                                        fontWeight: '500'
+                                    }
+                                }, field.label),
+                                createElement('span', {
+                                    style: {
+                                        color: '#666',
+                                        fontSize: '0.9em'
+                                    }
+                                }, `(${field.type})`)
+                            ),
+                            createElement('span', {
+                                style: {
+                                    color: '#007cba',
+                                    fontSize: '20px'
+                                }
+                            }, '›') // Arrow indicating edit
+                        )
+                    )
+                ),
+                // --- Right: Settings ---
+                createElement(
+                    'div', {
+                        style: {
+                            width: '40%'
+                        }
+                    },
+                    renderSettings()
+                )
+            )
+        );
+    }
+
+    // ==========================================
+    // RENDER: STEP 2 - TEMPLATE & STYLE
+    // ==========================================
+    if (step === 1) {
+        return createElement(
+            'div', {
                 style: {
-                    marginTop: '15px',
+                    marginTop: '20px'
+                }
+            },
+            // Progress Indicator
+            createElement('div', {
+                    style: {
+                        marginBottom: '20px',
+                        padding: '10px',
+                        background: '#e5e5e5',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }
+                },
+                createElement(Button, {
+                    isSecondary: true,
+                    onClick: () => setStep(0)
+                }, '< Back to Structure'),
+                createElement('h2', {
+                    style: {
+                        margin: 0
+                    }
+                }, 'Step 2: Template & Design'),
+                createElement(Button, {
+                    isPrimary: true,
+                    isBusy: isSaving,
+                    onClick: () => handleSave(true)
+                }, isSaving ? 'Building...' : 'Save & Build Block')
+            ),
+
+            // --- CHEAT SHEET ---
+            cheatSheet && createElement(
+                PanelBody, {
+                    title: 'Template Snippets (Use these keys in your HTML)',
+                    initialOpen: true,
+                    style: {
+                        marginBottom: '20px',
+                        background: '#f0f6fc',
+                        border: '1px solid #cce5ff'
+                    }
+                },
+                createElement('div', {
+                    dangerouslySetInnerHTML: {
+                        __html: cheatSheet
+                    },
+                    style: {
+                        fontSize: '13px',
+                        lineHeight: '1.6',
+                        maxHeight: '250px',
+                        overflowY: 'auto',
+                        padding: '10px'
+                    }
+                })
+            ),
+
+            createElement('div', {
+                    style: {
+                        display: 'flex',
+                        gap: '20px'
+                    }
+                },
+                // --- HTML Column ---
+                createElement('div', {
+                        style: {
+                            width: '50%'
+                        }
+                    },
+                    createElement('h3', null, 'HTML Template'),
+                    createElement('p', {
+                        style: {
+                            fontSize: '12px',
+                            color: '#666'
+                        }
+                    }, 'Use Mustache syntax {{key}} for dynamic data.'),
+                    createElement('textarea', {
+                        id: 'bf-html-template-area',
+                        value: template,
+                        onChange: (e) => setTemplate(e.target.value),
+                        style: {
+                            width: '100%',
+                            minHeight: '400px',
+                            fontFamily: 'monospace',
+                            padding: '12px',
+                            fontSize: '13px',
+                            border: '1px solid #757575',
+                            borderRadius: '4px',
+                            whiteSpace: 'pre'
+                        },
+                        placeholder: `<div class="banner">\n  <h2>{{${fields[0]?.key || 'field_key'}}}</h2>\n</div>`
+                    })
+                ),
+
+                // --- CSS Column ---
+                createElement('div', {
+                        style: {
+                            width: '50%'
+                        }
+                    },
+                    createElement('h3', null, 'CSS Styles'),
+                    createElement('p', {
+                        style: {
+                            fontSize: '12px',
+                            color: '#666'
+                        }
+                    }, 'Scoped automatically to the block wrapper.'),
+                    createElement('textarea', {
+                        value: css,
+                        onChange: (e) => setCss(e.target.value),
+                        style: {
+                            width: '100%',
+                            minHeight: '400px',
+                            fontFamily: 'monospace',
+                            padding: '12px',
+                            fontSize: '13px',
+                            border: '1px solid #757575',
+                            borderRadius: '4px',
+                            whiteSpace: 'pre'
+                        },
+                        placeholder: `.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}`
+                    })
+                )
+            ),
+
+            createElement('hr', {
+                style: {
+                    margin: '20px 0'
+                }
+            }),
+
+            message && createElement('div', {
+                style: {
+                    padding: '15px',
+                    backgroundColor: message.includes('✅') ? '#d4edda' : '#f8d7da',
+                    color: message.includes('✅') ? '#155724' : '#721c24',
+                    border: '1px solid',
+                    borderColor: message.includes('✅') ? '#c3e6cb' : '#f5c6cb',
+                    borderRadius: '4px',
+                    textAlign: 'center',
                     fontWeight: 'bold'
                 }
             }, message)
-        ),
+        );
+    }
 
-        // --- Right Column: Settings Panel ---
-        createElement(
-            'div', {
-                style: {
-                    width: '40%'
-                }
-            },
-            renderSettings()
-        )
-    );
+    // Fallback? Should not happen.
+    return null;
 };
 
 
