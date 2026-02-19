@@ -1,40 +1,101 @@
 /**
  * Editor Application for defining block components.
  */
-const { useState, useEffect, createElement } = wp.element;
-const { Button, TextControl, Panel, PanelBody, SelectControl } = wp.components;
+const {
+    useState,
+    useEffect,
+    createElement
+} = wp.element;
+const {
+    Button,
+    TextControl,
+    Panel,
+    PanelBody,
+    SelectControl,
+    TabPanel
+} = wp.components;
 
 // Define the available field types (your component palette)
-const FIELD_TYPES = [
-    { label: 'Text Input', value: 'text' },
-    { label: 'Number Input', value: 'number' },
-    { label: 'Range Slider', value: 'range' }, // New
+const FIELD_TYPES = [{
+        label: 'Text Input',
+        value: 'text'
+    },
+    {
+        label: 'Number Input',
+        value: 'number'
+    },
+    {
+        label: 'Range Slider',
+        value: 'range'
+    }, // New
     // { label: 'Email Address', value: 'email' }, // New (uses TextControl)
-    { label: 'URL Link', value: 'url' },       // New (uses URLInput or TextControl)
-    
-    { label: 'Text Area', value: 'textarea' },
-    { label: 'Rich Text Content', value: 'contentEditor' }, // Existing/Renamed (WYSIWYG)
-    
-    { label: 'Image/Media', value: 'image' },
-    { label: 'File Upload', value: 'file' }, // New (uses MediaUpload)
-    { label: 'Gallery', value: 'gallery' }, // New (complex, placeholder added)
-    
-    { label: 'Date Picker', value: 'date' },
-    { label: 'Date Time Picker', value: 'datetime' }, // New
-    { label: 'Time Picker', value: 'time' },         // New
-    
-    { label: 'Color Picker', value: 'color' },
-    { label: 'Icon Picker', value: 'icon' }, // New (Placeholder)
-    
-    { label: 'Repeater/Group', value: 'repeater' }, // Complex, requires nested fields
-    { label: 'Relational (Post Select)', value: 'relational' }, // Complex, placeholder added
+    {
+        label: 'URL Link',
+        value: 'url'
+    }, // New (uses URLInput or TextControl)
+
+    {
+        label: 'Text Area',
+        value: 'textarea'
+    },
+    {
+        label: 'Rich Text Content',
+        value: 'contentEditor'
+    }, // Existing/Renamed (WYSIWYG)
+
+    {
+        label: 'Image/Media',
+        value: 'image'
+    },
+    {
+        label: 'File Upload',
+        value: 'file'
+    }, // New (uses MediaUpload)
+    {
+        label: 'Gallery',
+        value: 'gallery'
+    }, // New (complex, placeholder added)
+
+    {
+        label: 'Date Picker',
+        value: 'date'
+    },
+    {
+        label: 'Date Time Picker',
+        value: 'datetime'
+    }, // New
+    {
+        label: 'Time Picker',
+        value: 'time'
+    }, // New
+
+    {
+        label: 'Color Picker',
+        value: 'color'
+    },
+    {
+        label: 'Icon Picker',
+        value: 'icon'
+    }, // New (Placeholder)
+
+    {
+        label: 'Repeater/Group',
+        value: 'repeater'
+    }, // Complex, requires nested fields
+    {
+        label: 'Relational (Post Select)',
+        value: 'relational'
+    }, // Complex, placeholder added
 ];
 
 // --- NEW CODE ADDED HERE (Utility Function) ---
 const slugifyKey = (value) => value.toLowerCase().replace(/[^a-z0-9_]/g, '');
 
 // --- 1. The Main Application Component ---
-const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
+const ComponentEditorApp = ({
+    initialConfig,
+    blockSlug
+}) => {
     // State to hold the array of fields (the component structure)
     const [fields, setFields] = useState(initialConfig.fields || []);
     const [isSaving, setIsSaving] = useState(false);
@@ -62,7 +123,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     // Live Reordering on Drag Enter
     const handleDragEnter = (e, targetIndex) => {
         if (draggedIndex === null || draggedIndex === targetIndex) return;
-        
+
         const newFields = [...fields];
         const item = newFields[draggedIndex];
 
@@ -100,13 +161,16 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                 if (property === 'key') {
                     value = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
                 }
-                return { ...field, [property]: value };
+                return {
+                    ...field,
+                    [property]: value
+                };
             }
             return field;
         });
         setFields(newFields);
         // Also update the selected field reference if it's the one being edited
-        setSelectedField(newFields[index]); 
+        setSelectedField(newFields[index]);
     };
 
     // --- Helper function to remove a field ---
@@ -122,7 +186,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
         const end = textarea.selectionEnd;
         const text = textarea.value;
         const tag = `{{${key}}}`;
-        
+
         const newContent = text.substring(0, start) + tag + text.substring(end);
         setTemplate(newContent);
 
@@ -133,22 +197,54 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
         }, 10);
     };
     // --- AJAX Save Handler ---
-    // --- AJAX Save Handler ---
+    // --- AJAX Build Trigger ---
+    const triggerBuild = () => {
+        jQuery.post(ajaxurl, {
+                action: 'bf_run_npm_build',
+                nonce: blockFactoryEditor.nonce
+            })
+            .done(response => {
+                if (response.success) {
+                    setMessage('✅ Build Complete! Your block is ready.');
+                } else {
+                    setMessage(`⚠️ Build Failed. Error Details:\n${response.output}`);
+                }
+            })
+            .fail(() => {
+                setMessage('⚠️ Save success, but Build request failed.');
+            })
+            .always(() => {
+                setIsSaving(false);
+            });
+    };
+
+    // --- Cheat Sheet State ---
+    const [cheatSheet, setCheatSheet] = useState(null);
+
     const handleSave = () => {
         setIsSaving(true);
         setMessage('Saving structure...');
+        setCheatSheet(null); // Reset
 
         const data = {
             action: 'block_factory_save_structure',
-            nonce: blockFactoryEditor.nonce, 
+            nonce: blockFactoryEditor.nonce,
             block_slug: blockSlug,
-            config_data: JSON.stringify({ fields, template, css }), // Include CSS
+            config_data: JSON.stringify({
+                fields,
+                template,
+                css
+            }),
         };
 
         jQuery.post(ajaxurl, data)
             .done(response => {
                 if (response.success) {
                     setMessage('✅ Structure saved! Starting build...');
+                    // Capture Cheat Sheet Content
+                    if (response.data.cheat_sheet) {
+                        setCheatSheet(response.data.cheat_sheet);
+                    }
                     triggerBuild(); // Auto-trigger build
                 } else {
                     setMessage(`❌ Error: ${response.data.message}`);
@@ -159,27 +255,6 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                 setMessage('❌ Critical Error: Could not reach the server.');
                 setIsSaving(false);
             });
-    };
-
-    // --- AJAX Build Trigger ---
-    const triggerBuild = () => {
-        jQuery.post(ajaxurl, {
-            action: 'bf_run_npm_build',
-            nonce: blockFactoryEditor.nonce 
-        })
-        .done(response => {
-            if (response.success) {
-                setMessage('✅ Build Complete! Your block is ready.');
-            } else {
-                setMessage(`⚠️ Build Failed. Error Details:\n${response.output}`);
-            }
-        })
-        .fail(() => {
-            setMessage('⚠️ Save success, but Build request failed.');
-        })
-        .always(() => {
-            setIsSaving(false);
-        });
     };
 
 
@@ -208,7 +283,10 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                     if (property === 'key') {
                         value = slugifyKey(value);
                     }
-                    return { ...subField, [property]: value };
+                    return {
+                        ...subField,
+                        [property]: value
+                    };
                 }
                 return subField;
             });
@@ -247,7 +325,7 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
             e.stopPropagation();
             setDraggedSubIndex(null);
         };
-        
+
         // Function to render the settings for an individual sub-field
         const renderSubFieldSettings = (subField, subIndex) => {
             return createElement(
@@ -267,8 +345,11 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                     }
                 },
                 createElement(
-                    PanelBody,
-                    { title: `${subField.label} (${subField.type})`, initialOpen: false, className: 'repeater-sub-field-settings' },
+                    PanelBody, {
+                        title: `${subField.label} (${subField.type})`,
+                        initialOpen: false,
+                        className: 'repeater-sub-field-settings'
+                    },
                     createElement(TextControl, {
                         label: "Sub-Field Label",
                         value: subField.label,
@@ -283,28 +364,42 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
                     createElement(SelectControl, {
                         label: "Sub-Field Type",
                         value: subField.type,
-                        options: FIELD_TYPES.map(t => ({ label: t.label, value: t.value })).filter(t => t.value !== 'repeater'),
+                        options: FIELD_TYPES.map(t => ({
+                            label: t.label,
+                            value: t.value
+                        })).filter(t => t.value !== 'repeater'),
                         onChange: val => updateSubField(subIndex, 'type', val),
                     }),
-                    createElement(Button, { 
-                        isDestructive: true, 
+                    createElement(Button, {
+                        isDestructive: true,
                         onClick: () => removeSubField(subIndex),
-                        style: { marginTop: '10px' }
+                        style: {
+                            marginTop: '10px'
+                        }
                     }, 'Delete Sub-Field')
                 )
             );
         };
 
         return createElement(
-            PanelBody,
-            { title: 'Repeater Sub-Fields', initialOpen: true },
-            
+            PanelBody, {
+                title: 'Repeater Sub-Fields',
+                initialOpen: true
+            },
+
             // 1. Add New Sub-Field Palette
             createElement('h4', null, 'Add New Sub-Field'),
-            createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '15px' } },
+            createElement('div', {
+                    style: {
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '5px',
+                        marginBottom: '15px'
+                    }
+                },
                 FIELD_TYPES.filter(t => t.value !== 'repeater' && t.value !== 'relational').map(type =>
-                    createElement(Button, { 
-                        isSecondary: true, 
+                    createElement(Button, {
+                        isSecondary: true,
                         onClick: () => addSubField(type.value)
                     }, type.label)
                 )
@@ -312,9 +407,9 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
 
             // 2. List of Existing Sub-Fields
             createElement('h4', null, `Current Sub-Fields (${subFields.length})`),
-            subFields.length > 0 ? 
-                subFields.map((subField, subIndex) => renderSubFieldSettings(subField, subIndex)) :
-                createElement('p', null, 'No sub-fields defined. Add one above.')
+            subFields.length > 0 ?
+            subFields.map((subField, subIndex) => renderSubFieldSettings(subField, subIndex)) :
+            createElement('p', null, 'No sub-fields defined. Add one above.')
         );
     };
 
@@ -356,185 +451,318 @@ const ComponentEditorApp = ({ initialConfig, blockSlug }) => {
     // };
     // --- Render the Field Settings Panel ---
     const renderSettings = () => { // <--- THIS FUNCTION IS REPLACED
-        if (!selectedField) return <p>Select a field on the left to edit its properties.</p>;
-        
+        if (!selectedField) return <p > Select a field on the left to edit its properties. < /p>;
+
         const index = fields.indexOf(selectedField);
 
-        return (
-            <Panel header="Field Settings">
-                {/* Standard Settings (Label, Key, Default, Delete) */}
-                <PanelBody title={`Editing: ${selectedField.label} (${selectedField.type})`} initialOpen={true}>
-                    <TextControl
-                        label="Field Label"
-                        value={selectedField.label}
-                        onChange={val => updateField(index, 'label', val)}
-                    />
-                    <TextControl
-                        label="Attribute Key (Variable Name)"
-                        value={selectedField.key}
-                        help="Must be unique, lowercase, and contain only letters, numbers, and underscores."
-                        onChange={val => updateField(index, 'key', val)}
-                    />
-                    <TextControl
-                        label="Default Value (Optional)"
-                        value={selectedField.default}
-                        onChange={val => updateField(index, 'default', val)}
-                    />
-                    <Button 
-                        isDestructive 
-                        onClick={() => removeField(index)} 
-                        style={{marginTop: '10px'}}
-                    >
-                        Delete Field
-                    </Button>
-                </PanelBody>
-
-                {/* CONDITIONALLY RENDER REPEATER SUB-FIELDS SETTINGS */}
-                {selectedField.type === 'repeater' && 
-                    renderRepeaterSettings(selectedField, index, updateField, removeField)
+        return ( <
+            Panel header = "Field Settings" > {
+                /* Standard Settings (Label, Key, Default, Delete) */
+            } <
+            PanelBody title = {
+                `Editing: ${selectedField.label} (${selectedField.type})`
+            }
+            initialOpen = {
+                true
+            } >
+            <
+            TextControl label = "Field Label"
+            value = {
+                selectedField.label
+            }
+            onChange = {
+                val => updateField(index, 'label', val)
+            }
+            /> <
+            TextControl label = "Attribute Key (Variable Name)"
+            value = {
+                selectedField.key
+            }
+            help = "Must be unique, lowercase, and contain only letters, numbers, and underscores."
+            onChange = {
+                val => updateField(index, 'key', val)
+            }
+            /> <
+            TextControl label = "Default Value (Optional)"
+            value = {
+                selectedField.default
+            }
+            onChange = {
+                val => updateField(index, 'default', val)
+            }
+            /> <
+            Button isDestructive onClick = {
+                () => removeField(index)
+            }
+            style = {
+                {
+                    marginTop: '10px'
                 }
-            </Panel>
+            } >
+            Delete Field <
+            /Button> < /
+            PanelBody >
+
+            {
+                /* CONDITIONALLY RENDER REPEATER SUB-FIELDS SETTINGS */
+            } {
+                selectedField.type === 'repeater' &&
+                    renderRepeaterSettings(selectedField, index, updateField, removeField)
+            } <
+            /Panel>
         );
     };
 
 
     return createElement(
-        'div',
-        { style: { display: 'flex', gap: '20px', marginTop: '20px' } },
-        
+        'div', {
+            style: {
+                display: 'flex',
+                gap: '20px',
+                marginTop: '20px'
+            }
+        },
+
         // --- Left Column: Component Palette ---
         createElement(
-            'div',
-            { style: { width: '20%', borderRight: '1px solid #ccc', paddingRight: '20px' } },
+            'div', {
+                style: {
+                    width: '20%',
+                    borderRight: '1px solid #ccc',
+                    paddingRight: '20px'
+                }
+            },
             createElement('h3', null, 'Component Palette'),
-            FIELD_TYPES.map(type => 
-                createElement(Button, { 
-                    isSecondary: true, 
-                    style: { display: 'block', width: '100%', marginBottom: '10px' },
+            FIELD_TYPES.map(type =>
+                createElement(Button, {
+                    isSecondary: true,
+                    style: {
+                        display: 'block',
+                        width: '100%',
+                        marginBottom: '10px'
+                    },
                     onClick: () => addField(type.value)
                 }, type.label)
             )
         ),
-        
+
         // --- Middle Column: Component Structure (The Fields List) ---
         createElement(
-            'div',
-            { style: { width: '40%' } },
-            createElement('h3', null, 'Block Structure'),
-            
-            // Render the list of fields
-            fields.map((field, index) => 
-                createElement('div', { 
-                    key: index, 
-                    draggable: true,
-                    onDragStart: (e) => handleDragStart(e, index),
-                    onDragOver: (e) => handleDragOver(e, index),
-                    onDragEnter: (e) => handleDragEnter(e, index), // Trigger reorder
-                    onDrop: (e) => handleDrop(e), // Just cleanup
-                    style: { 
-                        padding: '10px', 
-                        marginBottom: '8px', 
-                        border: '1px solid #ddd',
-                        // Visual feedback for dragging
-                        backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
-                        opacity: draggedIndex === index ? 0.5 : 1,
-                        cursor: 'grab',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        transition: 'background-color 0.2s, opacity 0.2s'
-                    },
-                    onClick: () => setSelectedField(field)
-                }, 
-                createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-                    // Drag Handle Icon (Optional visual cue)
-                    createElement('span', { style: { cursor: 'grab', color: '#999', fontSize: '18px' } }, '⋮⋮'),
-                    createElement('span', null, `${field.label} (${field.type})`)
-                ),
-                // NEW: Quick-add button next to field names
-                createElement(Button, { 
-                    isSmall: true, 
-                    isTertiary: true,
-                    onClick: (e) => { e.stopPropagation(); insertTagAtCursor(field.key); }
-                }, 'Add to HTML')
-                )
-            ),
-            createElement('hr', { style: { margin: '20px 0' } }),
-            // --- NEW SECTION: HTML TEMPLATE EDITOR ---
-            createElement('h3', null, '2. HTML Template'),
-            createElement('p', { style: { fontSize: '12px', color: '#666' } }, 
-                'Write your HTML below. Click the "Add to HTML" buttons above or use {{field_key}} placeholders.'
-            ),
-            
-            createElement('textarea', {
-                id: 'bf-html-template-area',
-                value: template,
-                onChange: (e) => setTemplate(e.target.value),
-                style: { 
-                    width: '100%', 
-                    minHeight: '250px', 
-                    fontFamily: 'monospace', 
-                    padding: '12px',
-                    fontSize: '13px',
-                    border: '1px solid #757575',
-                    borderRadius: '4px'
+            'div', {
+                style: {
+                    width: '40%'
+                }
+            },
+            createElement(TabPanel, {
+                    className: "bf-editor-tabs",
+                    activeClass: "is-active-tab",
+                    tabs: [{
+                            name: 'structure',
+                            title: '1. Structure',
+                            className: 'bf-tab-structure'
+                        },
+                        {
+                            name: 'template',
+                            title: '2. Template & Style',
+                            className: 'bf-tab-template'
+                        },
+                    ]
                 },
-                placeholder: `<div class="banner">\n  <h2>{{${fields[0]?.key || 'field_key'}}}</h2>\n</div>`
-            }),
-            createElement('hr', { style: { margin: '20px 0' } }),
+                (tab) => {
+                    if (tab.name === 'structure') {
+                        return createElement('div', {
+                                style: {
+                                    marginTop: '20px'
+                                }
+                            },
+                            createElement('h3', null, 'Block Fields'),
 
-            // --- 3. CSS EDITOR ---
-            createElement('h3', null, '3. CSS Styles'),
-            createElement('p', { style: { fontSize: '12px', color: '#666' } }, 
-                'Add custom CSS for this block. It will be applied to both the editor and frontend.'
+                            // Render the list of fields
+                            fields.map((field, index) =>
+                                createElement('div', {
+                                        key: index,
+                                        draggable: true,
+                                        onDragStart: (e) => handleDragStart(e, index),
+                                        onDragOver: (e) => handleDragOver(e, index),
+                                        onDragEnter: (e) => handleDragEnter(e, index), // Trigger reorder
+                                        onDrop: (e) => handleDrop(e), // Just cleanup
+                                        style: {
+                                            padding: '10px',
+                                            marginBottom: '8px',
+                                            border: '1px solid #ddd',
+                                            // Visual feedback for dragging
+                                            backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
+                                            opacity: draggedIndex === index ? 0.5 : 1,
+                                            cursor: 'grab',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            transition: 'background-color 0.2s, opacity 0.2s'
+                                        },
+                                        onClick: () => setSelectedField(field)
+                                    },
+                                    createElement('div', {
+                                            style: {
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px'
+                                            }
+                                        },
+                                        // Drag Handle Icon (Optional visual cue)
+                                        createElement('span', {
+                                            style: {
+                                                cursor: 'grab',
+                                                color: '#999',
+                                                fontSize: '18px'
+                                            }
+                                        }, '⋮⋮'),
+                                        createElement('span', null, `${field.label} (${field.type})`)
+                                    ),
+                                    // NEW: Quick-add button next to field names
+                                    createElement(Button, {
+                                        isSmall: true,
+                                        isTertiary: true,
+                                        onClick: (e) => {
+                                            e.stopPropagation();
+                                            insertTagAtCursor(field.key);
+                                        }
+                                    }, 'Add to HTML')
+                                )
+                            ),
+                            fields.length === 0 && createElement('p', {
+                                style: {
+                                    fontStyle: 'italic',
+                                    color: '#777'
+                                }
+                            }, 'No fields yet. Add one from the Component Palette.')
+                        );
+                    } else if (tab.name === 'template') {
+                        return createElement('div', {
+                                style: {
+                                    marginTop: '20px'
+                                }
+                            },
+                            // --- CHEAT SHEET (Moved Here) ---
+                            cheatSheet && createElement(
+                                PanelBody, {
+                                    title: 'Template Snippets (Cheat Sheet)',
+                                    initialOpen: true,
+                                    style: {
+                                        marginBottom: '20px',
+                                        background: '#f8f9fa',
+                                        border: '1px solid #ddd'
+                                    }
+                                },
+                                createElement('div', {
+                                    dangerouslySetInnerHTML: {
+                                        __html: cheatSheet
+                                    },
+                                    style: {
+                                        fontSize: '12px',
+                                        lineHeight: '1.5',
+                                        maxHeight: '200px',
+                                        overflowY: 'auto'
+                                    }
+                                })
+                            ),
+
+                            // --- HTML TEMPLATE EDITOR ---
+                            createElement('h3', null, 'HTML Template'),
+                            createElement('p', {
+                                    style: {
+                                        fontSize: '12px',
+                                        color: '#666'
+                                    }
+                                },
+                                'Write your HTML below. Click the "Add to HTML" buttons in the Structure tab to insert keys.'
+                            ),
+
+                            createElement('textarea', {
+                                id: 'bf-html-template-area',
+                                value: template,
+                                onChange: (e) => setTemplate(e.target.value),
+                                style: {
+                                    width: '100%',
+                                    minHeight: '250px',
+                                    fontFamily: 'monospace',
+                                    padding: '12px',
+                                    fontSize: '13px',
+                                    border: '1px solid #757575',
+                                    borderRadius: '4px'
+                                },
+                                placeholder: `<div class="banner">\n  <h2>{{${fields[0]?.key || 'field_key'}}}</h2>\n</div>`
+                            }),
+                            createElement('hr', {
+                                style: {
+                                    margin: '20px 0'
+                                }
+                            }),
+
+                            // --- CSS EDITOR ---
+                            createElement('h3', null, 'CSS Styles'),
+                            createElement('textarea', {
+                                value: css,
+                                onChange: (e) => setCss(e.target.value),
+                                style: {
+                                    width: '100%',
+                                    minHeight: '150px',
+                                    fontFamily: 'monospace',
+                                    padding: '12px',
+                                    fontSize: '13px',
+                                    border: '1px solid #757575',
+                                    borderRadius: '4px'
+                                },
+                                placeholder: `.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}`
+                            })
+                        );
+                    }
+                }
             ),
-            createElement('textarea', {
-                value: css,
-                onChange: (e) => setCss(e.target.value),
-                style: { 
-                    width: '100%', 
-                    minHeight: '150px', 
-                    fontFamily: 'monospace', 
-                    padding: '12px',
-                    fontSize: '13px',
-                    border: '1px solid #757575',
-                    borderRadius: '4px'
-                },
-                placeholder: `.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}`
-            }),
+
             createElement('hr', null),
-            
+
             // Save Button and Messages
-            createElement(Button, { 
+            createElement(Button, {
                 isPrimary: true,
                 isBusy: isSaving,
-                onClick: () => handleSave(), 
-                disabled: isSaving
+                onClick: () => handleSave(),
+                disabled: isSaving,
+                style: {
+                    marginTop: '20px'
+                }
             }, isSaving ? 'Compiling Code...' : 'Save Structure & Build Block'),
 
-            message && createElement('p', { style: { marginTop: '15px', fontWeight: 'bold' } }, message)
+            message && createElement('p', {
+                style: {
+                    marginTop: '15px',
+                    fontWeight: 'bold'
+                }
+            }, message)
         ),
 
         // --- Right Column: Settings Panel ---
         createElement(
-            'div',
-            { style: { width: '40%' } },
+            'div', {
+                style: {
+                    width: '40%'
+                }
+            },
             renderSettings()
         )
     );
 };
 
- 
+
 // --- Render the application once the DOM is ready ---
-jQuery(document).ready(function() {
+jQuery(document).ready(function () {
     const rootElement = document.getElementById('component-editor-root');
-    
+
     // Check if the localized data object exists (blockFactoryEditor)
-    if (rootElement && typeof blockFactoryEditor !== 'undefined') { 
+    if (rootElement && typeof blockFactoryEditor !== 'undefined') {
         wp.element.render(
-            createElement(ComponentEditorApp, { 
+            createElement(ComponentEditorApp, {
                 // CRITICAL: Access the nested properties
-                initialConfig: blockFactoryEditor.config, 
-                blockSlug: blockFactoryEditor.blockSlug 
+                initialConfig: blockFactoryEditor.config,
+                blockSlug: blockFactoryEditor.blockSlug
             }),
             rootElement
         );

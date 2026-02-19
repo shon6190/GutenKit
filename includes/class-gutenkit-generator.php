@@ -133,6 +133,12 @@ class GutenKit_Generator
 				$this->generate_render_php($block_slug, $config_data);
 			}
 
+			// Generate Cheat Sheet (Info for Admin)
+			$cheat_sheet_html = '';
+			if (isset($config_data['fields'])) {
+				$cheat_sheet_html = $this->generate_data_cheat_sheet($block_slug, $config_data['fields']);
+			}
+
 			// Generate style.scss if css is provided
 			if (isset($config_data['css'])) {
 				$style_scss_path = BLOCKS_BASE_PATH . $block_slug . '/style.scss';
@@ -142,7 +148,8 @@ class GutenKit_Generator
 
 			wp_send_json_success(array(
 				'message' => 'Block structure saved!',
-				'next_step' => 'Run build.'
+				'next_step' => 'Run build.',
+				'cheat_sheet' => $cheat_sheet_html
 			));
 		} else {
 			wp_send_json_error(array('message' => 'Failed to write config file.'));
@@ -258,23 +265,25 @@ class GutenKit_Generator
 
 		foreach ($config_data['fields'] as $field) {
 			$key = $field['key'];
-			if (!isset($block_meta['attributes'][$key])) {
-				$type = 'string';
-				if (in_array($field['type'], ['number', 'range', 'relational'])) {
-					$type = 'number';
-				} elseif (in_array($field['type'], ['image', 'file', 'button'])) {
-					$type = 'object';
-				} elseif (in_array($field['type'], ['repeater', 'gallery'])) {
-					$type = 'array';
-				}
+			// Check/Update attribute definition
+			// We DO overwrite existing definitions to support type changes (e.g. text -> number)
+			// checking if isset is bad if user changes field type.
 
-				$attr_definition = ['type' => $type];
-				if ($type === 'array') {
-					$attr_definition['default'] = [];
-					$attr_definition['items'] = ['type' => 'object'];
-				}
-				$block_meta['attributes'][$key] = $attr_definition;
+			$type = 'string';
+			if (in_array($field['type'], ['number', 'range', 'relational'])) {
+				$type = 'number';
+			} elseif (in_array($field['type'], ['image', 'file', 'button'])) {
+				$type = 'object';
+			} elseif (in_array($field['type'], ['repeater', 'gallery'])) {
+				$type = 'array';
 			}
+
+			$attr_definition = ['type' => $type];
+			if ($type === 'array') {
+				$attr_definition['default'] = [];
+				$attr_definition['items'] = ['type' => 'object'];
+			}
+			$block_meta['attributes'][$key] = $attr_definition;
 		}
 
 		file_put_contents($json_path, json_encode($block_meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
@@ -927,28 +936,51 @@ class GutenKit_Generator
 		// Escape backticks in the template because we will wrap it in backticks for JS
 		$js_safe_template = str_replace('`', '\`', $template);
 
-		// 1. Handle Repeater Loops: {{#repeaterName}} content {{/repeaterName}}
-		// Find all repeater fields first to know their structure
+		// 1. Handle Repeater & Gallery Loops: {{#key}} content {{/key}}
+		// Find all repeater and gallery fields first to know their structure
 		$repeater_fields = [];
+		$gallery_fields = [];
+
 		foreach ($fields as $field) {
 			if ($field['type'] === 'repeater') {
 				$repeater_fields[$field['key']] = $field; // Store full field config including subFields
+			}
+			if ($field['type'] === 'gallery') {
+				$gallery_fields[$field['key']] = $field;
 			}
 		}
 
 		// Regex to find loops
 		// Matches {{#key}} ... {{/key}}
 		// format: {{#key}} content {{/key}}
-		$js_safe_template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields) {
-			$repeater_key = $matches[1];
+		$js_safe_template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields) {
+			$loop_key = $matches[1];
 			$inner_content = $matches[2];
 
-			// Check if this repeater exists in our config
-			if (!isset($repeater_fields[$repeater_key])) {
+			$is_repeater = isset($repeater_fields[$loop_key]);
+			$is_gallery = isset($gallery_fields[$loop_key]);
+
+			// Check if this repeater/gallery exists in our config
+			if (!$is_repeater && !$is_gallery) {
 				return $matches[0]; // Return original if not found
 			}
 
-			$sub_fields = $repeater_fields[$repeater_key]['subFields'] ?? [];
+			if ($is_gallery) {
+				// Handle Gallery Loop
+				// Item is the image object { id, url, alt, ... }
+				// {{url}} -> ${item.url}
+				// {{alt}} -> ${item.alt}
+				// {{id}} -> ${item.id}
+
+				$inner_content = str_replace('{{url}}', '${item.url || ""}', $inner_content);
+				$inner_content = str_replace('{{alt}}', '${item.alt || ""}', $inner_content);
+				$inner_content = str_replace('{{id}}', '${item.id || ""}', $inner_content);
+
+				return "\${ attributes.$loop_key && attributes.$loop_key.map((item, index) => `$inner_content`).join('') }";
+			}
+
+			// Handle Repeater Loop
+			$sub_fields = $repeater_fields[$loop_key]['subFields'] ?? [];
 
 			// Process inner content for subfields
 			foreach ($sub_fields as $sub_field) {
@@ -959,6 +991,8 @@ class GutenKit_Generator
 				// Inside the map, 'item' is the current object
 				if ($sType === 'image' || $sType === 'file') {
 					$replacement = "\${item.$sKey?.url || ''}";
+					// Handle Alt/Filename: {{key_alt}}
+					$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey . '_alt', '/') . '\s*\}\}/', "\${item.$sKey?.alt || item.$sKey?.filename || ''}", $inner_content);
 				} else {
 					$replacement = "\${item.$sKey || ''}";
 				}
@@ -968,10 +1002,7 @@ class GutenKit_Generator
 			}
 
 			// Wrap in map
-			// attributes.$repeater_key && attributes.$repeater_key.map((item, index) => ` ... `).join('')
-			// Note: We use \` for the inner backticks because this whole string is inside a PHP double-quoted string.
-			// The final JS output needs to look like: ${ attributes.key && attributes.key.map(...) }
-			return "\${ attributes.$repeater_key && attributes.$repeater_key.map((item, index) => `$inner_content`).join('') }";
+			return "\${ attributes.$loop_key && attributes.$loop_key.map((item, index) => `$inner_content`).join('') }";
 		}, $js_safe_template);
 
 
@@ -980,13 +1011,16 @@ class GutenKit_Generator
 			$key = $field['key'];
 			$type = $field['type'];
 
-			// Skip if it's a repeater that we might have already processed (or don't want to replace top-level)
-			if ($type === 'repeater')
+			// Skip if it's a repeater/gallery that we might have already processed (or don't want to replace top-level)
+			if ($type === 'repeater' || $type === 'gallery')
 				continue;
 
 			if ($type === 'image' || $type === 'file') {
 				// We'll replace {{key}} with ${attributes.$key?.url || ''}
 				$replacement = "\${attributes.$key?.url || ''}";
+				// Handle Alt: {{key_alt}}
+				$replacement_alt = "\${attributes.$key?.alt || attributes.$key?.filename || ''}";
+				$js_safe_template = preg_replace('/\{\{\s*' . preg_quote($key . '_alt', '/') . '\s*\}\}/', $replacement_alt, $js_safe_template);
 			} else {
 				$replacement = "\${attributes.$key || ''}";
 			}
@@ -1005,27 +1039,55 @@ class GutenKit_Generator
 		$fields = $config['fields'];
 		$block_dir = BLOCKS_BASE_PATH . $slug;
 
-		// 1. Handle Repeater Loops: {{#repeaterName}} content {{/repeaterName}}
-		// Find all repeater fields first
+		// 1. Handle Repeater & Gallery Loops: {{#key}} content {{/key}}
+		// Find all repeater and gallery fields first
 		$repeater_fields = [];
+		$gallery_fields = [];
+
 		foreach ($fields as $field) {
 			if ($field['type'] === 'repeater') {
 				$repeater_fields[$field['key']] = $field;
+			}
+			if ($field['type'] === 'gallery') {
+				$gallery_fields[$field['key']] = $field;
 			}
 		}
 
 		// Regex to find loops
 		// Matches {{#key}} ... {{/key}}
-		$template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields) {
-			$repeater_key = $matches[1];
+		$template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields) {
+			$loop_key = $matches[1];
 			$inner_content = $matches[2];
 
-			// Check if this repeater exists
-			if (!isset($repeater_fields[$repeater_key])) {
+			$is_repeater = isset($repeater_fields[$loop_key]);
+			$is_gallery = isset($gallery_fields[$loop_key]);
+
+			// Check if this repeater/gallery exists
+			if (!$is_repeater && !$is_gallery) {
 				return $matches[0];
 			}
 
-			$sub_fields = $repeater_fields[$repeater_key]['subFields'] ?? [];
+			if ($is_gallery) {
+				// Handle Gallery Loop
+				// Item is the image object { id, url, alt, ... }
+				// {{url}} -> $item['url']
+				// {{alt}} -> $item['alt']
+				// {{id}} -> $item['id']
+
+				$inner_content = str_replace('{{url}}', '<?php echo esc_url($item[\'url\'] ?? \'\'); ?>', $inner_content);
+				$inner_content = str_replace('{{alt}}', '<?php echo esc_attr($item[\'alt\'] ?? \'\'); ?>', $inner_content);
+				$inner_content = str_replace('{{id}}', '<?php echo esc_attr($item[\'id\'] ?? \'\'); ?>', $inner_content);
+
+				// Wrap in PHP loop
+				$loop_start = "<?php if(!empty(\$attributes['$loop_key']) && is_array(\$attributes['$loop_key'])): ?>\n";
+				$loop_start .= "<?php foreach(\$attributes['$loop_key'] as \$item): ?>";
+				$loop_end = "<?php endforeach; ?>\n<?php endif; ?>";
+
+				return $loop_start . $inner_content . $loop_end;
+			}
+
+			// Handle Repeater
+			$sub_fields = $repeater_fields[$loop_key]['subFields'] ?? [];
 
 			// Process inner content for subfields
 			foreach ($sub_fields as $sub_field) {
@@ -1034,25 +1096,59 @@ class GutenKit_Generator
 				$php_replacement = '';
 
 				// Inside the loop, we use $item['key']
-				// Need to handle types similar to top-level
 				switch ($sType) {
 					case 'image':
 					case 'file':
 						$php_replacement = "<?php echo esc_url(\$item['$sKey']['url'] ?? ''); ?>";
+						// Handle Alt: {{key_alt}}
+						$alt_replacement = "<?php echo esc_attr(\$item['$sKey']['alt'] ?? \$item['$sKey']['filename'] ?? ''); ?>";
+						$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey . '_alt', '/') . '\s*\}\}/', $alt_replacement, $inner_content);
+						break;
+					case 'number':
+					case 'range':
+					case 'relational':
+						$php_replacement = "<?php echo esc_html(\$item['$sKey'] ?? ''); ?>";
+						break;
+					case 'url':
+						$php_replacement = "<?php echo esc_url(\$item['$sKey'] ?? ''); ?>";
+						break;
+					case 'color':
+					case 'date':
+					case 'time':
+					case 'datetime':
+					case 'icon':
+						$php_replacement = "<?php echo esc_attr(\$item['$sKey'] ?? ''); ?>";
+						break;
+					case 'gallery':
+						// 1. Support nested loop: {{#gallery_key}} ... {{/gallery_key}}
+						// We look for this pattern inside $inner_content
+						$inner_content = preg_replace_callback('/\{\{#' . preg_quote($sKey, '/') . '\}\}(.*?)\{\{\/' . preg_quote($sKey, '/') . '\}\}/s', function ($gMatches) use ($sKey) {
+							$gInner = $gMatches[1];
+							$gInner = str_replace('{{url}}', '<?php echo esc_url($gItem[\'url\'] ?? \'\'); ?>', $gInner);
+							$gInner = str_replace('{{alt}}', '<?php echo esc_attr($gItem[\'alt\'] ?? \'\'); ?>', $gInner);
+							$gInner = str_replace('{{id}}', '<?php echo esc_attr($gItem[\'id\'] ?? \'\'); ?>', $gInner);
+
+							return "<?php if(!empty(\$item['$sKey']) && is_array(\$item['$sKey'])): foreach(\$item['$sKey'] as \$gItem): ?>$gInner<?php endforeach; endif; ?>";
+						}, $inner_content);
+
+						// 2. Safe fallback for direct access {{gallery_key}} (e.g. debugging)
+						// Prevents Fatal Error by not using wp_kses_post on array
+						$php_replacement = "<?php echo (is_array(\$item['$sKey'] ?? '') ? count(\$item['$sKey'] ?? []) . ' images' : ''); ?>";
 						break;
 					default:
-						$php_replacement = "<?php echo wp_kses_post(\$item['$sKey'] ?? ''); ?>";
+						// Text, Textarea, ContentEditor
+						// Safe check for array
+						$php_replacement = "<?php echo wp_kses_post(is_array(\$item['$sKey'] ?? '') ? json_encode(\$item['$sKey'] ?? '') : (\$item['$sKey'] ?? '')); ?>";
 						break;
 				}
 
-				// Replace {{subkey}} with PHP code
+				// Replace {{subkey}} with PHP code (if not already handled by gallery loop)
 				$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey, '/') . '\s*\}\}/', $php_replacement, $inner_content);
 			}
 
 			// Wrap in PHP loop
-			// Check if attributes[key] exists and is array, then loop
-			$loop_start = "<?php if(!empty(\$attributes['$repeater_key']) && is_array(\$attributes['$repeater_key'])): ?>\n";
-			$loop_start .= "<?php foreach(\$attributes['$repeater_key'] as \$item): ?>";
+			$loop_start = "<?php if(!empty(\$attributes['$loop_key']) && is_array(\$attributes['$loop_key'])): ?>\n";
+			$loop_start .= "<?php foreach(\$attributes['$loop_key'] as \$item): ?>";
 			$loop_end = "<?php endforeach; ?>\n<?php endif; ?>";
 
 			return $loop_start . $inner_content . $loop_end;
@@ -1065,10 +1161,12 @@ class GutenKit_Generator
 			$key = $field['key'];
 			$type = $field['type'];
 
-			// Skip repeater fields in top-level replacement if handled above? 
-			// Actually, if the user didn't use the Loop syntax but used {{repeater}}, we optionally fallback or leave it.
-			// Existing code handled {{repeater}} by printing nothing or a loop comment.
-			// Let's keep existing switch as fallback for non-loop usages of {{key}}.
+			// Skip repeater/gallery fields in top-level replacement
+			if ($type === 'repeater' || $type === 'gallery') {
+				// Fallback for {{repeater}} without loop syntax? 
+				// existing code had a fallback. We can keep it if needed, or rely on loop syntax.
+				continue;
+			}
 
 			$php = '';
 
@@ -1077,16 +1175,33 @@ class GutenKit_Generator
 				case 'file':
 					// Default to URL so it can be used in src="" attributes
 					$php = "<?php echo esc_url(\$attributes['$key']['url'] ?? ''); ?>";
+					// Handle Alt: {{key_alt}}
+					$alt_php = "<?php echo esc_attr(\$attributes['$key']['alt'] ?? \$attributes['$key']['filename'] ?? ''); ?>";
+					$template = str_replace('{{' . $key . '_alt}}', $alt_php, $template);
 					break;
-				case 'gallery':
-					$php = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?><div class=\"custom-gallery\"><?php foreach(\$attributes['$key'] as \$item): ?><img src=\"<?php echo esc_url(\$item['url']); ?>\" /><?php endforeach; ?></div><?php endif; ?>";
+				case 'number':
+				case 'range':
+					// Numbers are safe to echo directly (casted to string by echo), or use esc_html
+					// But we must ensure it's not an array if data is corrupted.
+					$php = "<?php echo esc_html(\$attributes['$key'] ?? ''); ?>";
 					break;
-				case 'repeater':
-					// Fallback for {{repeater}} without loop syntax
-					$php = "<?php if(!empty(\$attributes['$key']) && is_array(\$attributes['$key'])): ?><?php foreach(\$attributes['$key'] as \$item): ?><!-- Loop --> <?php endforeach; ?><?php endif; ?>";
+				case 'url':
+					$php = "<?php echo esc_url(\$attributes['$key'] ?? ''); ?>";
+					break;
+				case 'color':
+				case 'date':
+				case 'time':
+				case 'datetime':
+				case 'icon':
+					$php = "<?php echo esc_attr(\$attributes['$key'] ?? ''); ?>";
+					break;
+				case 'relational':
+					$php = "<?php echo esc_html(\$attributes['$key'] ?? ''); ?>";
 					break;
 				default:
-					$php = "<?php echo wp_kses_post(\$attributes['$key'] ?? ''); ?>";
+					// Text, Textarea, ContentEditor (HTML)
+					// Safe check: Ensure it's a string before passing to wp_kses_post
+					$php = "<?php echo wp_kses_post(is_array(\$attributes['$key'] ?? '') ? json_encode(\$attributes['$key'] ?? '') : (\$attributes['$key'] ?? '')); ?>";
 					break;
 			}
 
@@ -1102,6 +1217,71 @@ class GutenKit_Generator
 			mkdir($block_dir, 0755, true);
 		}
 		file_put_contents($block_dir . '/render.php', $file_content);
+	}
+
+	private function generate_data_cheat_sheet($slug, $fields)
+	{
+		$lines = [];
+		$lines[] = "<h3>Field Cheat Sheet</h3>";
+		$lines[] = "<p>Copy these snippets into your <strong>Render Template</strong> or <strong>Canvas Template</strong>.</p>";
+		$lines[] = "<hr>";
+
+		foreach ($fields as $field) {
+			$key = $field['key'];
+			$label = $field['label'];
+			$type = $field['type'];
+
+			$lines[] = "<div style='margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;'>";
+			$lines[] = "<strong>$label ($key) - $type</strong><br>";
+
+			if ($type === 'repeater') {
+				$lines[] = "<em>Loop:</em><br>";
+				$lines[] = "<code>{{#$key}}</code><br>";
+
+				if (isset($field['subFields'])) {
+					foreach ($field['subFields'] as $sub) {
+						$sKey = $sub['key'];
+						$sType = $sub['type'];
+
+						if ($sType === 'gallery') {
+							$lines[] = "&nbsp;&nbsp; <em>Gallery Loop:</em><br>";
+							$lines[] = "&nbsp;&nbsp; <code>{{#$sKey}}</code><br>";
+							$lines[] = "&nbsp;&nbsp;&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
+							$lines[] = "&nbsp;&nbsp; <code>{{/$sKey}}</code><br>";
+						} else {
+							$lines[] = "&nbsp;&nbsp; {{{$sKey}}} <small>($sType)</small><br>";
+							if ($sType === 'image' || $sType === 'file') {
+								$lines[] = "&nbsp;&nbsp; {{{$sKey}_alt}} <small>(Alt Text)</small><br>";
+							}
+						}
+					}
+				}
+
+				$lines[] = "<code>{{/$key}}</code>";
+			} elseif ($type === 'gallery') {
+				$lines[] = "<em>Loop (Gallery):</em><br>";
+				$lines[] = "<code>{{#$key}}</code><br>";
+				$lines[] = "&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
+				$lines[] = "<code>{{/$key}}</code>";
+			} elseif ($type === 'image' || $type === 'file') {
+				$lines[] = "URL: <code>{{{$key}}}</code><br>";
+				$lines[] = "Alt/Filename: <code>{{{$key}_alt}}</code>";
+			} else {
+				$lines[] = "Value: <code>{{{$key}}}</code>";
+			}
+
+			$lines[] = "</div>";
+		}
+
+		$content = implode("\n", $lines);
+		$block_dir = BLOCKS_BASE_PATH . $slug;
+		// Ensure directory exists (though generate_render_php usually handles it)
+		if (!file_exists($block_dir)) {
+			mkdir($block_dir, 0755, true);
+		}
+		file_put_contents($block_dir . '/cheat_sheet.html', $content);
+
+		return $content; // Return content for immediate display
 	}
 
 	private function delete_dir_recursive($dir)
