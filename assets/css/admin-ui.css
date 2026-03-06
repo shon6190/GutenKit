@@ -495,3 +495,205 @@
     color: var(--gk-primary);
     border-color: #bfdbfe;
 }
+
+/* =========================================
+   React Component Editor Overrides
+   (Styling WordPress native components)
+   ========================================= */
+
+/* Main layout wrapper */
+#component-editor-root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 1. Step Header / Progress Bar */
+#component-editor-root>div>div:first-child {
+    background: var(--gk-bg-main) !important;
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius) !important;
+    padding: 15px 20px !important;
+    box-shadow: var(--gk-shadow-sm) !important;
+}
+
+#component-editor-root>div>div:first-child h2 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: var(--gk-text-main) !important;
+}
+
+/* 2. Three-Column Cards Setup */
+#component-editor-root>div>div[style*="gap: 20px"]>div {
+    background: var(--gk-bg-card);
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius-lg);
+    padding: 20px !important;
+    box-shadow: var(--gk-shadow-sm);
+    /* Remove the inline right border from the first column */
+    border-right: 1px solid var(--gk-border) !important;
+}
+
+/* Column Headers */
+#component-editor-root>div>div[style*="gap: 20px"]>div>h3,
+#component-editor-root .components-panel__body>.components-panel__body-title {
+    margin-top: 0;
+    margin-bottom: 0px !important;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gk-text-main);
+    padding-bottom: 15px !important;
+    border-bottom: 1px solid var(--gk-border-light);
+}
+
+/* 5. Field Settings Panel (Right side) */
+#component-editor-root .gutenkit-field-settings-wrapper {
+    /* Style for the new div that replaced Panel/PanelBody */
+    padding: 0;
+}
+
+#component-editor-root .components-panel {
+    border: none !important;
+    background: transparent !important;
+}
+
+/* Fix inner padding for settings panel so it doesn't double up */
+#component-editor-root .components-panel__body {
+    border-top: none !important;
+    border-bottom: none !important;
+}
+
+#component-editor-root .components-panel__body>.components-panel__body-title {
+    margin-bottom: 20px !important;
+    /* Space between title and first input */
+}
+
+/* 6. Sub-Field Accordion Styles (PanelBody Toggle) */
+#component-editor-root .components-panel__body-toggle {
+    padding: 15px !important;
+    transition: all 0.2s ease;
+}
+
+#component-editor-root .components-panel__body-toggle:hover,
+#component-editor-root .components-panel__body-toggle:focus {
+    color: var(--gk-primary) !important;
+    background: #eff6ff !important;
+    box-shadow: inset 0 0 0 1px var(--gk-primary), inset 0 0 0 2px #fff !important;
+    outline: none !important;
+}
+
+#component-editor-root .components-panel__body.is-opened {
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius) !important;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+/* 7. Add Fields Palette Buttons */
+#component-editor-root .components-button.is-secondary {
+    border: 1px solid var(--gk-primary) !important;
+    color: var(--gk-primary) !important;
+    background: transparent !important;
+    border-radius: var(--gk-radius) !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: none !important;
+    justify-content: center;
+}
+
+#component-editor-root .components-button.is-secondary:hover {
+    background: var(--gk-primary) !important;
+    color: white !important;
+}
+
+/* 4. Draggable Block Fields List */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"] {
+    border-radius: var(--gk-radius) !important;
+    border: 1px solid var(--gk-border) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+    padding: 12px 15px !important;
+    transition: all 0.2s ease !important;
+}
+
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"]:hover {
+    border-color: var(--gk-primary) !important;
+    box-shadow: var(--gk-shadow-sm) !important;
+}
+
+/* Grab handle */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"] span:first-child {
+    margin-right: 10px;
+}
+
+/* Label text */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"] span:nth-child(2) {
+    color: var(--gk-text-main);
+}
+
+/* Arrow indicator */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"]>span {
+    font-size: 24px !important;
+    font-weight: 300 !important;
+}
+
+/* Selected state override */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"][style*="border-left: 4px solid"] {
+    border-left: 4px solid var(--gk-primary) !important;
+    background-color: #eff6ff !important;
+    border-color: #bfdbfe !important;
+}
+
+/* 5. Field Settings Panel (Right side) */
+#component-editor-root .components-panel {
+    border: none !important;
+    background: transparent !important;
+}
+
+#component-editor-root .components-panel__body {
+    border-top: none !important;
+    border-bottom: none !important;
+}
+
+#component-editor-root .components-panel__body>.components-panel__body-title {
+    margin-bottom: 20px;
+    padding: 10px;
+    border-radius: var(--gk-radius);
+    transition: background-color 0.2s ease;
+}
+
+#component-editor-root .components-panel__body>.components-panel__body-title:hover {
+    background-color: var(--gk-bg-main) !important;
+}
+
+#component-editor-root .components-base-control {
+    margin-bottom: 15px;
+}
+
+/* Settings Inputs */
+#component-editor-root .components-text-control__input,
+#component-editor-root .components-select-control__input {
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius) !important;
+    padding: 3px 12px !important;
+    font-size: 14px !important;
+    box-shadow: none !important;
+    width: 100% !important;
+}
+
+#component-editor-root .components-text-control__input:focus,
+#component-editor-root .components-select-control__input:focus {
+    border-color: var(--gk-primary) !important;
+    box-shadow: 0 0 0 1px var(--gk-primary) !important;
+}
+
+/* Delete Button */
+#component-editor-root .components-button.is-destructive {
+    color: var(--gk-danger) !important;
+    text-decoration: none !important;
+    padding: 0 !important;
+    height: auto !important;
+    font-weight: 500 !important;
+}
+
+#component-editor-root .components-button.is-destructive:hover {
+    color: var(--gk-danger-hover) !important;
+    text-decoration: underline !important;
+}
