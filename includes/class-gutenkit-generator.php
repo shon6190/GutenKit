@@ -1209,9 +1209,24 @@ class GutenKit_Generator
 			$template = str_replace('{{' . $key . '}}', $php, $template);
 		}
 
+		// 1. Start Output Buffering & Try Block
 		$file_content = "<?php\n/**\n * Render $slug\n */\n";
-		$file_content .= "\$wrapper_classes = 'bf-block-' . esc_attr('$slug');\n?>\n";
-		$file_content .= "<div class=\"<?php echo \$wrapper_classes; ?>\">\n" . $template . "\n</div>";
+		$file_content .= "try {\n";
+		$file_content .= "    \$wrapper_classes = 'bf-block-' . esc_attr('$slug');\n";
+		$file_content .= "?>\n";
+
+		// 2. The Main Block Content
+		$file_content .= "<div class=\"<?php echo \$wrapper_classes; ?>\">\n" . $template . "\n</div>\n";
+
+		// 3. Catch Block
+		$file_content .= "<?php\n";
+		$file_content .= "} catch (\Throwable \$e) {\n";
+		$file_content .= "    if (current_user_can('edit_posts')) {\n";
+		$file_content .= "        echo '<div style=\"border: 2px dashed red; padding: 10px; color: red;\">';\n";
+		$file_content .= "        echo '<strong>Block Error ($slug):</strong> ' . esc_html(\$e->getMessage());\n";
+		$file_content .= "        echo '</div>';\n";
+		$file_content .= "    }\n";
+		$file_content .= "}\n?>";
 
 		if (!file_exists($block_dir)) {
 			mkdir($block_dir, 0755, true);
