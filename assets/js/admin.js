@@ -55,7 +55,7 @@ jQuery(document).ready(function ($) {
     // });
 
     // Handle Install Dependencies
-    $('#bf-install-dependencies-btn').on('click', function(e) {
+    $('#bf-install-dependencies-btn').on('click', function (e) {
         e.preventDefault();
         const $btn = $(this);
         const $progress = $('#bf-install-progress');
@@ -70,23 +70,118 @@ jQuery(document).ready(function ($) {
         $output.hide().empty();
 
         $.post(ajaxurl, {
-            action: 'bf_install_dependencies',
-            nonce: blockFactoryAdmin.nonce
-        })
-        .done(function(response) {
-            if (response.success) {
-                $output.html(response.data.output).show();
-                alert('Dependencies installed successfully! Reloading page...');
-                window.location.reload();
-            } else {
-                $output.html('Error:\n' + response.data.message + '\n\nOutput:\n' + response.data.output).show();
-                alert('Installation Failed. Check the output log below.');
+                action: 'bf_install_dependencies',
+                nonce: blockFactoryAdmin.nonce
+            })
+            .done(function (response) {
+                if (response.success) {
+                    $output.html(response.data.output).show();
+                    alert('Dependencies installed successfully! Reloading page...');
+                    window.location.reload();
+                } else {
+                    $output.html('Error:\n' + response.data.message + '\n\nOutput:\n' + response.data.output).show();
+                    alert('Installation Failed. Check the output log below.');
+                    $btn.prop('disabled', false).text('Install Dependencies');
+                }
+            })
+            .fail(function () {
+                alert('Server Error: Request failed or timed out. Please check your server logs.');
                 $btn.prop('disabled', false).text('Install Dependencies');
-            }
-        })
-        .fail(function() {
-            alert('Server Error: Request failed or timed out. Please check your server logs.');
-            $btn.prop('disabled', false).text('Install Dependencies');
-        });
+            });
     });
+
+    // --- Dashicon Picker Logic ---
+
+    // Curated list of useful dashboard icons for blocks
+    const curatedDashicons = [
+        'editor-code', 'star-filled', 'star-half', 'star-empty', 'format-image',
+        'format-gallery', 'format-video', 'format-audio', 'layout', 'grid-view',
+        'list-view', 'admin-users', 'businessman', 'admin-site', 'admin-page',
+        'admin-comments', 'admin-media', 'admin-settings', 'admin-network',
+        'admin-home', 'admin-appearance', 'admin-plugins', 'dashboard',
+        'chart-line', 'chart-bar', 'chart-pie', 'megaphone', 'awards',
+        'location-alt', 'store', 'cart', 'products', 'tickets-alt', 'calendar-alt',
+        'clock', 'camera', 'images-alt', 'image-filter', 'image-crop',
+        'cover-image', 'testimonial', 'portfolio', 'welcome-widgets-menus',
+        'email', 'buddicons-groups', 'buddicons-replies', 'buddicons-topics',
+        'edit', 'media-document', 'welcome-learn-more', 'shield', 'thumbs-up'
+    ];
+
+    const $pickerBtn = $('#gutenkit-open-icon-picker');
+    const $pickerDropdown = $('#gutenkit-icon-picker-dropdown');
+    const $pickerGrid = $('#gutenkit-icon-picker-grid');
+    const $iconSearch = $('#gutenkit-icon-search');
+    const $iconInput = $('#component_icon');
+    const $iconPreview = $('#gutenkit-current-icon-preview');
+
+    // Populate grid
+    function renderIcons(iconsToRender) {
+        $pickerGrid.empty();
+        if (iconsToRender.length === 0) {
+            $pickerGrid.html('<div style="grid-column: 1/-1; text-align: center; padding: 10px; color: #64748b; font-size: 12px;">No icons found.</div>');
+            return;
+        }
+
+        const currentVal = $iconInput.val().trim();
+
+        iconsToRender.forEach(slug => {
+            const isSelected = slug === currentVal ? 'is-selected' : '';
+            const $icon = $(`
+                <div class="gutenkit-icon-item ${isSelected}" data-slug="${slug}" title="${slug}">
+                    <span class="dashicons dashicons-${slug}"></span>
+                </div>
+            `);
+            $pickerGrid.append($icon);
+        });
+    }
+
+    if ($pickerGrid.length) {
+        renderIcons(curatedDashicons);
+
+        // Open Picker
+        $pickerBtn.on('click', function (e) {
+            e.stopPropagation();
+            $pickerDropdown.toggleClass('is-open');
+            if ($pickerDropdown.hasClass('is-open')) {
+                // Re-render to show updated selection state based on current input
+                renderIcons(curatedDashicons);
+                // Clear search and refocus
+                $iconSearch.val('').focus();
+            }
+        });
+
+        // Close on outside click
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('.gutenkit-icon-picker-wrapper').length) {
+                $pickerDropdown.removeClass('is-open');
+            }
+        });
+
+        // Prevent closing when clicking inside picker
+        $pickerDropdown.on('click', function (e) {
+            e.stopPropagation();
+        });
+
+        // Handle icon click
+        $pickerGrid.on('click', '.gutenkit-icon-item', function () {
+            const selectedSlug = $(this).data('slug');
+            $iconInput.val(selectedSlug);
+            $iconPreview.attr('class', 'dashicons dashicons-' + selectedSlug);
+            $pickerDropdown.removeClass('is-open');
+        });
+
+        // Search logic
+        $iconSearch.on('input', function () {
+            const query = $(this).val().toLowerCase().trim();
+            const filtered = curatedDashicons.filter(slug => slug.includes(query));
+            renderIcons(filtered);
+        });
+
+        // Sync preview when input is typed manually
+        $iconInput.on('input', function () {
+            const val = $(this).val().trim() || 'editor-code';
+            $iconPreview.attr('class', 'dashicons dashicons-' + val);
+        });
+    }
+
 });

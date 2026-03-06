@@ -18,15 +18,22 @@ $block_name = ucwords(str_replace('-', ' ', $block_slug));
 // Note: The admin-header.php is required in the router (block-factory.php) before this file is included
 ?>
 
-<div class="wrap">
-    <div class="row">
-        <h1>Editing Structure for: <?php echo esc_html($block_name); ?></h1>
-        <!-- <button id="build-block-btn" class="button button-primary">Build Block</button> -->
+<div class="wrap gutenkit-wrap">
+    <div class="gutenkit-header gutenkit-header-editor">
+        <div class="gutenkit-header-title">
+            <a href="<?php echo esc_url(admin_url('admin.php?page=block-factory')); ?>" class="gutenkit-back-link">
+                <span class="dashicons dashicons-arrow-left-alt2"></span> Back to Dashboard
+            </a>
+            <h1>Editing Structure: <strong><?php echo esc_html($block_name); ?></strong></h1>
+            <p>Define the fields (Text, Textarea, Image, Repeater, etc.) for this block below.</p>
+        </div>
     </div>
 
-    <p class="description">Define the fields (Text, Textarea, Image, Repeater, etc.) for this block here.</p>
-
-    <div id="component-editor-root">
-        Loading component editor...
+    <div class="gutenkit-editor-container">
+        <div id="component-editor-root">
+            <div class="gutenkit-loading">
+                <span class="spinner is-active"></span> Loading component editor...
+            </div>
+        </div>
     </div>
 </div>
