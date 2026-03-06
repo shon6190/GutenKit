@@ -55,6 +55,14 @@ class GutenKit_Admin
 				'nonce' => wp_create_nonce('block_factory_nonce'),
 			)
 		);
+
+		// New modern UI styles
+		wp_enqueue_style(
+			'gutenkit-admin-ui-css',
+			BLOCK_FACTORY_URL . 'assets/css/admin-ui.css',
+			array(),
+			filemtime(BLOCK_FACTORY_PATH . 'assets/css/admin-ui.css') ? filemtime(BLOCK_FACTORY_PATH . 'assets/css/admin-ui.css') : '1.0'
+		);
 	}
 
 	public function enqueue_block_editor_assets()
@@ -131,47 +139,57 @@ class GutenKit_Admin
 	public function render_dashboard()
 	{
 		?>
-		<div class="wrap">
-			<h1>GutenKit Dashboard</h1>
-			<?php
-			$blocks_directory = BLOCKS_BASE_PATH;
-			// Use the same search logic (glob) or just list from blocks dir
-			$block_folders = glob($blocks_directory . '*', GLOB_ONLYDIR);
+		<div class="wrap gutenkit-wrap">
+			<div class="gutenkit-header">
+				<h1>GutenKit Dashboard</h1>
+				<p>Manage your custom Gutenberg blocks easily.</p>
+			</div>
 
-			if (empty($block_folders)) {
-				echo '<p>No blocks found. Use the generator form to create one!</p>';
-				include(BLOCK_FACTORY_PATH . 'admin/generator-form.php');
-				return;
-			}
+			<div class="gutenkit-dashboard-grid">
+				<div class="gutenkit-main-content">
+					<?php
+					$blocks_directory = BLOCKS_BASE_PATH;
+					// Use the same search logic (glob) or just list from blocks dir
+					$block_folders = glob($blocks_directory . '*', GLOB_ONLYDIR);
 
-			echo '<h2>Existing Blocks</h2>';
-			echo '<table class="wp-list-table widefat fixed striped">';
-			echo '<thead><tr><th>Name</th><th>Slug</th><th>Actions</th></tr></thead>';
-			echo '<tbody>';
+					if (empty($block_folders)) {
+						echo '<div class="gutenkit-empty-state">';
+						echo '<div class="dashicons dashicons-block-default"></div>';
+						echo '<h3>No Blocks Found</h3>';
+						echo '<p>You haven\'t created any blocks yet. Use the generator form to create your first one!</p>';
+						echo '</div>';
+					} else {
+						echo '<h2>Existing Blocks</h2>';
+						echo '<div class="gutenkit-blocks-grid">';
 
-			foreach ($block_folders as $block_path) {
-				$block_slug = basename($block_path);
-				$block_name = ucwords(str_replace('-', ' ', $block_slug));
-				$edit_url = admin_url('admin.php?page=block-factory&action=edit_structure&block_slug=' . $block_slug);
+						foreach ($block_folders as $block_path) {
+							$block_slug = basename($block_path);
+							$block_name = ucwords(str_replace('-', ' ', $block_slug));
+							$edit_url = admin_url('admin.php?page=block-factory&action=edit_structure&block_slug=' . $block_slug);
 
-				echo '<tr>';
-				echo '<td><strong>' . esc_html($block_name) . '</strong></td>';
-				echo '<td><code>' . esc_html($block_slug) . '</code></td>';
-				echo '<td><a href="' . esc_url($edit_url) . '">Edit Structure</a>';
+							echo '<div class="gutenkit-block-card">';
+							echo '<div class="gutenkit-block-card-header">';
+							echo '<span class="dashicons dashicons-layout"></span>';
+							echo '<h3>' . esc_html($block_name) . '</h3>';
+							echo '</div>';
+							echo '<div class="gutenkit-block-card-body">';
+							echo '<code>/' . esc_html($block_slug) . '</code>';
+							echo '</div>';
+							echo '<div class="gutenkit-block-card-actions">';
+							echo '<a href="' . esc_url($edit_url) . '" class="button button-primary">Edit Structure</a>';
+							echo '<button class="button block-factory-delete-btn gutenkit-delete-btn" data-slug="' . esc_attr($block_slug) . '" title="Permanently delete all files for this block."><span class="dashicons dashicons-trash"></span></button>';
+							echo '</div>';
+							echo '</div>'; // End block-card
+						}
 
-				// Delete Button
-				echo ' | <a href="#" 
-					class="block-factory-delete-btn" 
-					data-slug="' . esc_attr($block_slug) . '" 
-					style="color: red;"
-					title="Permanently delete all files for this block."
-					>Delete</a></td>';
-				echo '</tr>';
-			}
-
-			echo '</tbody></table>';
-			include(BLOCK_FACTORY_PATH . 'admin/generator-form.php');
-			?>
+						echo '</div>'; // End blocks-grid
+					}
+					?>
+				</div>
+				<div class="gutenkit-sidebar">
+					<?php include(BLOCK_FACTORY_PATH . 'admin/generator-form.php'); ?>
+				</div>
+			</div>
 		</div>
 		<?php
 	}

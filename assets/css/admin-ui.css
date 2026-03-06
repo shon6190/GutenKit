@@ -1,0 +1,699 @@
+/**
+ * GutenKit Admin UI Styles
+ * Modern, clean interface for Block Factory
+ */
+
+:root {
+    --gk-primary: #3b82f6;
+    --gk-primary-hover: #2563eb;
+    --gk-text-main: #1e293b;
+    --gk-text-muted: #64748b;
+    --gk-bg-main: #f8fafc;
+    --gk-bg-card: #ffffff;
+    --gk-border: #e2e8f0;
+    --gk-border-light: #f1f5f9;
+    --gk-radius: 8px;
+    --gk-radius-lg: 12px;
+    --gk-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --gk-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --gk-danger: #ef4444;
+    --gk-danger-hover: #dc2626;
+    --gk-warning: #f59e0b;
+    --gk-success: #10b981;
+}
+
+/* Wrapper */
+.gutenkit-wrap {
+    max-width: 1200px;
+    margin: 20px auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Header */
+.gutenkit-header {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--gk-border);
+}
+
+.gutenkit-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--gk-text-main);
+    margin: 0 0 8px 0;
+    padding: 0;
+    line-height: 1.2;
+}
+
+.gutenkit-header p {
+    font-size: 16px;
+    color: var(--gk-text-muted);
+    margin: 0;
+}
+
+/* Dashboard Layout */
+.gutenkit-dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 30px;
+    align-items: start;
+}
+
+@media (max-width: 1024px) {
+    .gutenkit-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Cards Grid */
+.gutenkit-blocks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 15px;
+}
+
+/* Block Card */
+.gutenkit-block-card {
+    background: var(--gk-bg-card);
+    border: 1px solid var(--gk-border);
+    border-radius: var(--gk-radius-lg);
+    padding: 20px;
+    box-shadow: var(--gk-shadow-sm);
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.gutenkit-block-card:hover {
+    box-shadow: var(--gk-shadow-md);
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+}
+
+.gutenkit-block-card-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.gutenkit-block-card-header .dashicons {
+    color: var(--gk-primary);
+    margin-right: 10px;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+}
+
+.gutenkit-block-card-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--gk-text-main);
+}
+
+.gutenkit-block-card-body {
+    flex-grow: 1;
+    margin-bottom: 20px;
+}
+
+.gutenkit-block-card-body code {
+    background: var(--gk-bg-main);
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--gk-text-muted);
+    font-size: 13px;
+    border: 1px solid var(--gk-border-light);
+}
+
+.gutenkit-block-card-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border-top: 1px solid var(--gk-border-light);
+    padding-top: 15px;
+}
+
+.gutenkit-block-card-actions .button-primary {
+    flex-grow: 1;
+    text-align: center;
+    background: var(--gk-primary);
+    border-color: var(--gk-primary);
+    border-radius: var(--gk-radius);
+    padding: 6px 14px;
+}
+
+.gutenkit-block-card-actions .button-primary:hover {
+    background: var(--gk-primary-hover);
+    border-color: var(--gk-primary-hover);
+}
+
+.gutenkit-delete-btn {
+    color: var(--gk-danger) !important;
+    border-color: var(--gk-danger) !important;
+    background: transparent !important;
+    border-radius: var(--gk-radius) !important;
+    padding: 0 8px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.gutenkit-delete-btn:hover {
+    background: #fef2f2 !important;
+    color: var(--gk-danger-hover) !important;
+}
+
+/* Empty State */
+.gutenkit-empty-state {
+    background: var(--gk-bg-card);
+    border: 2px dashed var(--gk-border);
+    border-radius: var(--gk-radius-lg);
+    padding: 60px 20px;
+    text-align: center;
+    margin-top: 20px;
+}
+
+.gutenkit-empty-state .dashicons {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: var(--gk-text-muted);
+    opacity: 0.5;
+    margin-bottom: 15px;
+}
+
+.gutenkit-empty-state h3 {
+    margin: 0 0 10px 0;
+    font-size: 20px;
+    color: var(--gk-text-main);
+}
+
+.gutenkit-empty-state p {
+    color: var(--gk-text-muted);
+    margin: 0;
+    font-size: 15px;
+}
+
+/* Generator Form Sidebar */
+.gutenkit-generator-card {
+    background: var(--gk-bg-card);
+    border: 1px solid var(--gk-border);
+    border-radius: var(--gk-radius-lg);
+    box-shadow: var(--gk-shadow-sm);
+    padding: 25px;
+    position: sticky;
+    top: 40px;
+}
+
+.gutenkit-generator-header {
+    margin-bottom: 25px;
+}
+
+.gutenkit-generator-header h2 {
+    margin: 0 0 5px 0;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.gutenkit-generator-header p {
+    margin: 0;
+    color: var(--gk-text-muted);
+    font-size: 14px;
+}
+
+/* Forms */
+.gutenkit-form-group {
+    margin-bottom: 20px;
+}
+
+.gutenkit-form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--gk-text-main);
+    font-size: 14px;
+}
+
+.gutenkit-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--gk-border);
+    border-radius: var(--gk-radius);
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: var(--gk-bg-card);
+}
+
+.gutenkit-input:focus {
+    border-color: var(--gk-primary);
+    box-shadow: 0 0 0 1px var(--gk-primary);
+    outline: none;
+}
+
+.gutenkit-input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.gutenkit-input-with-icon .dashicons {
+    position: absolute;
+    left: 10px;
+    color: var(--gk-text-muted);
+}
+
+.gutenkit-input-with-icon .gutenkit-input {
+    padding-left: 36px;
+}
+
+.gutenkit-form p.description {
+    margin-top: 6px;
+    font-size: 13px;
+    color: var(--gk-text-muted);
+}
+
+.gutenkit-btn-primary {
+    width: 100%;
+    background: var(--gk-primary);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: var(--gk-radius);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.2s;
+}
+
+.gutenkit-btn-primary:hover {
+    background: var(--gk-primary-hover);
+    color: white;
+}
+
+/* Alerts */
+.gutenkit-alert {
+    display: flex;
+    padding: 15px;
+    border-radius: var(--gk-radius);
+    margin-bottom: 20px;
+    gap: 12px;
+}
+
+.gutenkit-alert-warning {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+}
+
+.gutenkit-alert-warning .gutenkit-alert-icon {
+    color: var(--gk-warning);
+}
+
+.gutenkit-alert-success {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+}
+
+.gutenkit-alert-success .gutenkit-alert-icon {
+    color: var(--gk-success);
+}
+
+.gutenkit-alert-icon {
+    margin-top: 2px;
+}
+
+.gutenkit-alert-content {
+    flex-grow: 1;
+}
+
+.gutenkit-alert-content strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+}
+
+.gutenkit-alert-content p {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+}
+
+.gutenkit-alert-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Editor Specific */
+.gutenkit-header-editor {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.gutenkit-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--gk-text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    margin-bottom: 12px;
+    transition: color 0.2s;
+}
+
+.gutenkit-back-link:hover {
+    color: var(--gk-primary);
+}
+
+.gutenkit-editor-container {
+    background: var(--gk-bg-card);
+    border: 1px solid var(--gk-border);
+    border-radius: var(--gk-radius-lg);
+    box-shadow: var(--gk-shadow-sm);
+    padding: 20px;
+    min-height: 400px;
+}
+
+.gutenkit-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--gk-text-muted);
+    padding: 40px;
+    font-size: 16px;
+}
+
+/* Dashicon Picker Styles */
+.gutenkit-btn-secondary {
+    background: #f1f5f9;
+    color: var(--gk-text-main);
+    border: 1px solid var(--gk-border);
+    padding: 8px 12px;
+    border-radius: var(--gk-radius);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    margin-left: 8px;
+}
+
+.gutenkit-btn-secondary:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+}
+
+.gutenkit-icon-picker-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 300px;
+    background-color: #ffffff;
+    /* Explicit background */
+    background: var(--gk-bg-card, #ffffff);
+    border: 1px solid #e2e8f0;
+    border-color: var(--gk-border, #e2e8f0);
+    border-radius: 8px;
+    border-radius: var(--gk-radius, 8px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    z-index: 99999;
+    margin-top: 8px;
+    padding: 12px;
+}
+
+.gutenkit-icon-picker-dropdown.is-open {
+    display: block;
+}
+
+.gutenkit-icon-picker-search {
+    margin-bottom: 12px;
+}
+
+.gutenkit-icon-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding-right: 4px;
+    width: 100%;
+    /* Ensure it spans the full dropdown width */
+    box-sizing: border-box;
+}
+
+/* Custom Scrollbar for Grid */
+.gutenkit-icon-picker-grid::-webkit-scrollbar {
+    width: 6px;
+}
+
+.gutenkit-icon-picker-grid::-webkit-scrollbar-track {
+    background: var(--gk-bg-main);
+    border-radius: 4px;
+}
+
+.gutenkit-icon-picker-grid::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.gutenkit-icon-picker-grid::-webkit-scrollbar-thumb:hover {
+    background: var(--gk-text-muted);
+}
+
+.gutenkit-icon-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    /* Take up the fraction of the grid column */
+    height: 36px;
+    /* Explicit height instead of aspect-ratio to prevent flex collapse */
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--gk-text-muted);
+    transition: all 0.15s;
+    margin: 0 auto;
+    position: relative;
+}
+
+.gutenkit-icon-item .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    display: block;
+    /* Ensure the icon renders properly inside flex */
+}
+
+.gutenkit-icon-item:hover,
+.gutenkit-icon-item.is-selected {
+    background: #eff6ff;
+    color: var(--gk-primary);
+    border-color: #bfdbfe;
+}
+
+/* =========================================
+   React Component Editor Overrides
+   (Styling WordPress native components)
+   ========================================= */
+
+/* Main layout wrapper */
+#component-editor-root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* 1. Step Header / Progress Bar */
+#component-editor-root>div>div:first-child {
+    background: var(--gk-bg-main) !important;
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius) !important;
+    padding: 15px 20px !important;
+    box-shadow: var(--gk-shadow-sm) !important;
+}
+
+#component-editor-root>div>div:first-child h2 {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: var(--gk-text-main) !important;
+}
+
+/* 2. Three-Column Cards Setup */
+#component-editor-root>div>div[style*="gap: 20px"]>div {
+    background: var(--gk-bg-card);
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius-lg);
+    padding: 20px !important;
+    box-shadow: var(--gk-shadow-sm);
+    /* Remove the inline right border from the first column */
+    border-right: 1px solid var(--gk-border) !important;
+}
+
+/* Column Headers */
+#component-editor-root>div>div[style*="gap: 20px"]>div>h3,
+#component-editor-root .components-panel__body>.components-panel__body-title {
+    margin-top: 0;
+    margin-bottom: 0px !important;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gk-text-main);
+    padding-bottom: 15px !important;
+    border-bottom: 1px solid var(--gk-border-light);
+}
+
+/* 5. Field Settings Panel (Right side) */
+#component-editor-root .gutenkit-field-settings-wrapper {
+    /* Style for the new div that replaced Panel/PanelBody */
+    padding: 0;
+}
+
+#component-editor-root .components-panel {
+    border: none !important;
+    background: transparent !important;
+}
+
+/* Fix inner padding for settings panel so it doesn't double up */
+#component-editor-root .components-panel__body {
+    border-top: none !important;
+    border-bottom: none !important;
+}
+
+#component-editor-root .components-panel__body>.components-panel__body-title {
+    margin-bottom: 20px !important;
+    /* Space between title and first input */
+}
+
+/* 6. Sub-Field Accordion Styles (PanelBody Toggle) */
+#component-editor-root .components-panel__body-toggle {
+    padding: 15px !important;
+    transition: all 0.2s ease;
+}
+
+#component-editor-root .components-panel__body-toggle:hover,
+#component-editor-root .components-panel__body-toggle:focus {
+    color: var(--gk-primary) !important;
+    background: #eff6ff !important;
+    box-shadow: inset 0 0 0 1px var(--gk-primary), inset 0 0 0 2px #fff !important;
+    outline: none !important;
+}
+
+#component-editor-root .components-panel__body.is-opened {
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius) !important;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+/* 7. Add Fields Palette Buttons */
+#component-editor-root .components-button.is-secondary {
+    border: 1px solid var(--gk-primary) !important;
+    color: var(--gk-primary) !important;
+    background: transparent !important;
+    border-radius: var(--gk-radius) !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: none !important;
+    justify-content: center;
+}
+
+#component-editor-root .components-button.is-secondary:hover {
+    background: var(--gk-primary) !important;
+    color: white !important;
+}
+
+/* 4. Draggable Block Fields List */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"] {
+    border-radius: var(--gk-radius) !important;
+    border: 1px solid var(--gk-border) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+    padding: 12px 15px !important;
+    transition: all 0.2s ease !important;
+}
+
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"]:hover {
+    border-color: var(--gk-primary) !important;
+    box-shadow: var(--gk-shadow-sm) !important;
+}
+
+/* Grab handle */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"] span:first-child {
+    margin-right: 10px;
+}
+
+/* Label text */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"] span:nth-child(2) {
+    color: var(--gk-text-main);
+}
+
+/* Arrow indicator */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"]>span {
+    font-size: 24px !important;
+    font-weight: 300 !important;
+}
+
+/* Selected state override */
+#component-editor-root>div>div[style*="gap: 20px"]>div:nth-child(2)>div[draggable="true"][style*="border-left: 4px solid"] {
+    border-left: 4px solid var(--gk-primary) !important;
+    background-color: #eff6ff !important;
+    border-color: #bfdbfe !important;
+}
+
+/* 5. Field Settings Panel (Right side) */
+#component-editor-root .components-panel {
+    border: none !important;
+    background: transparent !important;
+}
+
+#component-editor-root .components-panel__body {
+    border-top: none !important;
+    border-bottom: none !important;
+}
+
+#component-editor-root .components-panel__body>.components-panel__body-title {
+    margin-bottom: 20px;
+    padding: 10px;
+    border-radius: var(--gk-radius);
+    transition: background-color 0.2s ease;
+}
+
+#component-editor-root .components-panel__body>.components-panel__body-title:hover {
+    background-color: var(--gk-bg-main) !important;
+}
+
+#component-editor-root .components-base-control {
+    margin-bottom: 15px;
+}
+
+/* Settings Inputs */
+#component-editor-root .components-text-control__input,
+#component-editor-root .components-select-control__input {
+    border: 1px solid var(--gk-border) !important;
+    border-radius: var(--gk-radius) !important;
+    padding: 3px 12px !important;
+    font-size: 14px !important;
+    box-shadow: none !important;
+    width: 100% !important;
+}
+
+#component-editor-root .components-text-control__input:focus,
+#component-editor-root .components-select-control__input:focus {
+    border-color: var(--gk-primary) !important;
+    box-shadow: 0 0 0 1px var(--gk-primary) !important;
+}
+
+/* Delete Button */
+#component-editor-root .components-button.is-destructive {
+    color: var(--gk-danger) !important;
+    text-decoration: none !important;
+    padding: 0 !important;
+    height: auto !important;
+    font-weight: 500 !important;
+}
+
+#component-editor-root .components-button.is-destructive:hover {
+    color: var(--gk-danger-hover) !important;
+    text-decoration: underline !important;
+}

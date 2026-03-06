@@ -929,6 +929,8 @@ class GutenKit_Generator
 			return '<div>Please define a template in the editor.</div>';
 		}
 
+		$placeholder = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgNjAwIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIj4KICA8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YxZjVmOSIgLz4KICA8ZyBmaWxsPSIjY2JkNWUxIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMjAsIDIyMCkiPgogICAgPHBhdGggZD0iTTM1LjIxNiAxMi43ODRDMzIuOTUxIDEwLjUxOSAzMC4yMDQgOS4zODMgMjcgOS4zODNzLTUuOTUyIDEuMTM2LTguMjE2IDMuNDAxQzE2LjUxOSAxNS4wNDkgMTUuMzgxIDE3Ljc5NiAxNS4zODEgMjFzMS4xMzYgNS45NTEgMy40IDguMjE2QzIxLjA0OSAzMS40ODEgMjMuNzk2IDMyLjYxOSAyNyAzMi42MTlzNS45NTEtMS4xMzYgOC4yMTYtMy40QzM3LjQ4MSAyNi45NTEgMzguNjE5IDI0LjIwNCAzOC42MTkgMjFzLTEuMTM2LTUuOTUxLTMuNC04LjIxNnoiIC8+CiAgICA8cGF0aCBkPSJNMTE1LjY1NCA4Ni4zOEw5Mi44MzIgNTQuNzAxYy0uODItMS4xMzQtMi4yNzItMS45Mi0zLjkwMi0xLjkyLTIuMDY0IDAtMy4yOTMgMS4xMDItMy45ODIgMi4wMjFsLTMxLjE2IDQyLjM2NC0yNS40NC0yOS40NzJhNC45MzUgNC45MzUgMCAwIDAtMy44ODQtMS43OWMtMS45NCAwLTMuNDkyIDEuMTgxLTQuMDU2IDIuMDVMNS4xODcgODUuNzc0di42NTljMCAxNy42NzIgMTQuMzI3IDMyIDMyIDMyaDEwMy40NTNjOC4yODQgMCAxNS4zNy0zLjE1NCAyMC4yMTQtOC42OTRMOTQuOTIgOTMuMjIxYzEuMDk2IDAgMi4xMzYtLjMxNiAzLjAyNS0uODg4Ljc4NC0uNTA1IDEuMzM1LTEuMjIxIDEuNTktMi4wNmwuNTc2LTIuMDFMMTE1LjY1NCA4Ni4zOEoiIC8+CiAgICA8cGF0aCBkPSJNMTQyLjEzMyA3Ljg2N0EyNi41NTYgMjYuNTU2IDAgMCAwIDEyMy4yNjcgMEgzMC43MzNDMTMuNzkyIDAgMCAxMy43OTIgMCAzMC43MzN2NzkuODE4bDkuODY3LTEzLjc2NmMxLjc4My0yLjQ5MyA0Ljc5OC00LjAxNiA3Ljk1LTQuMDE2czQuOTUgMS4xNTggNi43MTIgMy4xMjdMMzkuMjM2IDExNC4yeiIgLz4KICA8L2c+Cjwvc3ZnPg==';
+
 		// We need to construct a JS template string from the HTML
 		// Replace {{key}} with ${attributes.key}
 		// NOTE: We need to be careful about quotes.
@@ -953,7 +955,7 @@ class GutenKit_Generator
 		// Regex to find loops
 		// Matches {{#key}} ... {{/key}}
 		// format: {{#key}} content {{/key}}
-		$js_safe_template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields) {
+		$js_safe_template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields, $placeholder) {
 			$loop_key = $matches[1];
 			$inner_content = $matches[2];
 
@@ -990,7 +992,7 @@ class GutenKit_Generator
 				// Determine replacement based on type
 				// Inside the map, 'item' is the current object
 				if ($sType === 'image' || $sType === 'file') {
-					$replacement = "\${item.$sKey?.url || ''}";
+					$replacement = "\${item.$sKey?.url || '$placeholder'}";
 					// Handle Alt/Filename: {{key_alt}}
 					$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey . '_alt', '/') . '\s*\}\}/', "\${item.$sKey?.alt || item.$sKey?.filename || ''}", $inner_content);
 				} else {
@@ -1016,8 +1018,8 @@ class GutenKit_Generator
 				continue;
 
 			if ($type === 'image' || $type === 'file') {
-				// We'll replace {{key}} with ${attributes.$key?.url || ''}
-				$replacement = "\${attributes.$key?.url || ''}";
+				// We'll replace {{key}} with ${attributes.$key?.url || 'placeholder'}
+				$replacement = "\${attributes.$key?.url || '$placeholder'}";
 				// Handle Alt: {{key_alt}}
 				$replacement_alt = "\${attributes.$key?.alt || attributes.$key?.filename || ''}";
 				$js_safe_template = preg_replace('/\{\{\s*' . preg_quote($key . '_alt', '/') . '\s*\}\}/', $replacement_alt, $js_safe_template);
@@ -1039,6 +1041,8 @@ class GutenKit_Generator
 		$fields = $config['fields'];
 		$block_dir = BLOCKS_BASE_PATH . $slug;
 
+		$placeholder = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgNjAwIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIj4KICA8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YxZjVmOSIgLz4KICA8ZyBmaWxsPSIjY2JkNWUxIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMjAsIDIyMCkiPgogICAgPHBhdGggZD0iTTM1LjIxNiAxMi43ODRDMzIuOTUxIDEwLjUxOSAzMC4yMDQgOS4zODMgMjcgOS4zODNzLTUuOTUyIDEuMTM2LTguMjE2IDMuNDAxQzE2LjUxOSAxNS4wNDkgMTUuMzgxIDE3Ljc5NiAxNS4zODEgMjFzMS4xMzYgNS45NTEgMy40IDguMjE2QzIxLjA0OSAzMS40ODEgMjMuNzk2IDMyLjYxOSAyNyAzMi42MTlzNS45NTEtMS4xMzYgOC4yMTYtMy40QzM3LjQ4MSAyNi45NTEgMzguNjE5IDI0LjIwNCAzOC42MTkgMjFzLTEuMTM2LTUuOTUxLTMuNC04LjIxNnoiIC8+CiAgICA8cGF0aCBkPSJNMTE1LjY1NCA4Ni4zOEw5Mi44MzIgNTQuNzAxYy0uODItMS4xMzQtMi4yNzItMS45Mi0zLjkwMi0xLjkyLTIuMDY0IDAtMy4yOTMgMS4xMDItMy45ODIgMi4wMjFsLTMxLjE2IDQyLjM2NC0yNS40NC0yOS40NzJhNC45MzUgNC45MzUgMCAwIDAtMy44ODQtMS43OWMtMS45NCAwLTMuNDkyIDEuMTgxLTQuMDU2IDIuMDVMNS4xODcgODUuNzc0di42NTljMCAxNy42NzIgMTQuMzI3IDMyIDMyIDMyaDEwMy40NTNjOC4yODQgMCAxNS4zNy0zLjE1NCAyMC4yMTQtOC42OTRMOTQuOTIgOTMuMjIxYzEuMDk2IDAgMi4xMzYtLjMxNiAzLjAyNS0uODg4Ljc4NC0uNTA1IDEuMzM1LTEuMjIxIDEuNTktMi4wNmwuNTc2LTIuMDFMMTE1LjY1NCA4Ni4zOEoiIC8+CiAgICA8cGF0aCBkPSJNMTQyLjEzMyA3Ljg2N0EyNi41NTYgMjYuNTU2IDAgMCAwIDEyMy4yNjcgMEgzMC43MzNDMTMuNzkyIDAgMCAxMy43OTIgMCAzMC43MzN2NzkuODE4bDkuODY3LTEzLjc2NmMxLjc4My0yLjQ5MyA0Ljc5OC00LjAxNiA3Ljk1LTQuMDE2czQuOTUgMS4xNTggNi43MTIgMy4xMjdMMzkuMjM2IDExNC4yeiIgLz4KICA8L2c+Cjwvc3ZnPg==';
+
 		// 1. Handle Repeater & Gallery Loops: {{#key}} content {{/key}}
 		// Find all repeater and gallery fields first
 		$repeater_fields = [];
@@ -1055,7 +1059,7 @@ class GutenKit_Generator
 
 		// Regex to find loops
 		// Matches {{#key}} ... {{/key}}
-		$template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields) {
+		$template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields, $placeholder) {
 			$loop_key = $matches[1];
 			$inner_content = $matches[2];
 
@@ -1099,7 +1103,7 @@ class GutenKit_Generator
 				switch ($sType) {
 					case 'image':
 					case 'file':
-						$php_replacement = "<?php echo esc_url(\$item['$sKey']['url'] ?? ''); ?>";
+						$php_replacement = "<?php echo esc_url(\$item['$sKey']['url'] ?? '$placeholder'); ?>";
 						// Handle Alt: {{key_alt}}
 						$alt_replacement = "<?php echo esc_attr(\$item['$sKey']['alt'] ?? \$item['$sKey']['filename'] ?? ''); ?>";
 						$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey . '_alt', '/') . '\s*\}\}/', $alt_replacement, $inner_content);
@@ -1174,7 +1178,7 @@ class GutenKit_Generator
 				case 'image':
 				case 'file':
 					// Default to URL so it can be used in src="" attributes
-					$php = "<?php echo esc_url(\$attributes['$key']['url'] ?? ''); ?>";
+					$php = "<?php echo esc_url(\$attributes['$key']['url'] ?? '$placeholder'); ?>";
 					// Handle Alt: {{key_alt}}
 					$alt_php = "<?php echo esc_attr(\$attributes['$key']['alt'] ?? \$attributes['$key']['filename'] ?? ''); ?>";
 					$template = str_replace('{{' . $key . '_alt}}', $alt_php, $template);

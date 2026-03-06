@@ -432,20 +432,33 @@ const ComponentEditorApp = ({
                 color: '#666',
                 fontStyle: 'italic',
                 border: '1px dashed #ccc',
-                marginTop: '20px'
+                marginTop: '10px',
+                borderRadius: '8px'
             }
         }, 'Select a field on the left to edit its settings.');
 
         const index = fields.indexOf(selectedField);
 
         return createElement(
-            Panel, {
-                header: "Field Settings"
+            'div', {
+                className: 'gutenkit-field-settings-wrapper',
             },
+            // We use a simple div for the title instead of PanelBody to remove accordion
+            createElement('h3', {
+                style: {
+                    margin: '0 0 20px 0',
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: 'var(--gk-text-main)',
+                    borderBottom: '1px solid var(--gk-border-light)',
+                    paddingBottom: '15px'
+                }
+            }, `Editing: ${selectedField.label} (${selectedField.type})`),
             createElement(
-                PanelBody, {
-                    title: `Editing: ${selectedField.label} (${selectedField.type})`,
-                    initialOpen: true
+                'div', {
+                    style: {
+                        marginBottom: '20px'
+                    }
                 },
                 createElement(TextControl, {
                     label: "Field Label",
