@@ -21,11 +21,7 @@ $content = $content ?? '';
     
     <div class="bf-inner-content">
         
-        <?php 
-        // Example: Display the 'default_title' attribute
-        if ( ! empty($attributes['default_title']) ) : ?>
-            <h2><?php echo esc_html($attributes['default_title']); ?></h2>
-        <?php endif; ?>
+
 
         <?php 
         // Display the standard RichText content passed from the editor

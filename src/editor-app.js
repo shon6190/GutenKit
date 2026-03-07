@@ -17,79 +17,80 @@ const {
 
 // Define the available field types (your component palette)
 const FIELD_TYPES = [{
-        label: 'Text Input',
-        value: 'text'
-    },
-    {
-        label: 'Number Input',
-        value: 'number'
-    },
-    {
-        label: 'Range Slider',
-        value: 'range'
-    }, // New
-    // { label: 'Email Address', value: 'email' }, // New (uses TextControl)
-    {
-        label: 'URL Link',
-        value: 'url'
-    }, // New (uses URLInput or TextControl)
+    label: 'Text Input',
+    value: 'text'
+},
+{
+    label: 'Number Input',
+    value: 'number'
+},
+{
+    label: 'Range Slider',
+    value: 'range'
+}, // New
+// { label: 'Email Address', value: 'email' }, // New (uses TextControl)
+{
+    label: 'URL Link',
+    value: 'url'
+}, // New (uses URLInput or TextControl)
 
-    {
-        label: 'Text Area',
-        value: 'textarea'
-    },
-    {
-        label: 'Rich Text Content',
-        value: 'contentEditor'
-    }, // Existing/Renamed (WYSIWYG)
+{
+    label: 'Text Area',
+    value: 'textarea'
+},
+{
+    label: 'Rich Text Content',
+    value: 'contentEditor'
+}, // Existing/Renamed (WYSIWYG)
 
-    {
-        label: 'Image/Media',
-        value: 'image'
-    },
-    {
-        label: 'File Upload',
-        value: 'file'
-    }, // New (uses MediaUpload)
-    {
-        label: 'Gallery',
-        value: 'gallery'
-    }, // New (complex, placeholder added)
+{
+    label: 'Image/Media',
+    value: 'image'
+},
+{
+    label: 'File Upload',
+    value: 'file'
+}, // New (uses MediaUpload)
+{
+    label: 'Gallery',
+    value: 'gallery'
+}, // New (complex, placeholder added)
 
-    {
-        label: 'Date Picker',
-        value: 'date'
-    },
-    {
-        label: 'Date Time Picker',
-        value: 'datetime'
-    }, // New
-    {
-        label: 'Time Picker',
-        value: 'time'
-    }, // New
+{
+    label: 'Date Picker',
+    value: 'date'
+},
+{
+    label: 'Date Time Picker',
+    value: 'datetime'
+}, // New
+{
+    label: 'Time Picker',
+    value: 'time'
+}, // New
 
-    {
-        label: 'Color Picker',
-        value: 'color'
-    },
-    {
-        label: 'Icon Picker',
-        value: 'icon'
-    }, // New (Placeholder)
+{
+    label: 'Color Picker',
+    value: 'color'
+},
+{
+    label: 'Icon Picker',
+    value: 'icon'
+}, // New (Placeholder)
 
-    {
-        label: 'Repeater/Group',
-        value: 'repeater'
-    }, // Complex, requires nested fields
-    {
-        label: 'Relational (Post Select)',
-        value: 'relational'
-    }, // Complex, placeholder added
+{
+    label: 'Repeater/Group',
+    value: 'repeater'
+}, // Complex, requires nested fields
+{
+    label: 'Relational (Post Select)',
+    value: 'relational'
+}, // Complex, placeholder added
 ];
 
 // --- NEW CODE ADDED HERE (Utility Function) ---
-const slugifyKey = (value) => value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+const slugifyKey = (value) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+const slugifyLabel = (value) => value.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ');
 
 // --- 1. The Main Application Component ---
 // --- 1. The Main Application Component ---
@@ -107,6 +108,9 @@ const ComponentEditorApp = ({
 
     // WIZARD STATE: 0 = Structure, 1 = Template & Build
     const [step, setStep] = useState(0);
+
+    // --- Validation State ---
+    const [invalidFields, setInvalidFields] = useState({});
 
     // --- Drag and Drop State ---
     const [draggedIndex, setDraggedIndex] = useState(null);
@@ -160,24 +164,45 @@ const ComponentEditorApp = ({
             if (i === index) {
                 // Ensure key is slugified
                 if (property === 'key') {
-                    value = value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                    value = slugifyKey(value);
                 }
-                return {
+                if (property === 'label') {
+                    value = slugifyLabel(value);
+                }
+                const updatedField = {
                     ...field,
                     [property]: value
                 };
+                if (property === 'label') {
+                    updatedField.key = slugifyKey(value);
+                }
+                return updatedField;
             }
             return field;
         });
         setFields(newFields);
         // Also update the selected field reference if it's the one being edited
         setSelectedField(newFields[index]);
+
+        // Clear validation error when field is updated
+        if (invalidFields[index]) {
+            const newInvalidFields = { ...invalidFields };
+            delete newInvalidFields[index];
+            setInvalidFields(newInvalidFields);
+        }
     };
 
     // --- Helper function to remove a field ---
     const removeField = (index) => {
         setFields(fields.filter((_, i) => i !== index));
         setSelectedField(null);
+
+        // Clear validation error when field is removed
+        if (invalidFields[index]) {
+            const newInvalidFields = { ...invalidFields };
+            delete newInvalidFields[index];
+            setInvalidFields(newInvalidFields);
+        }
     };
 
     // Helper to insert tags like {{field_key}} at cursor position
@@ -203,9 +228,9 @@ const ComponentEditorApp = ({
     // --- AJAX Build Trigger ---
     const triggerBuild = () => {
         jQuery.post(ajaxurl, {
-                action: 'bf_run_npm_build',
-                nonce: blockFactoryEditor.nonce
-            })
+            action: 'bf_run_npm_build',
+            nonce: blockFactoryEditor.nonce
+        })
             .done(response => {
                 if (response.success) {
                     setMessage('✅ Build Complete! Your block is ready.');
@@ -226,8 +251,34 @@ const ComponentEditorApp = ({
 
     // Save Handling (Supports "Save & Next" and "Save & Build")
     const handleSave = (shouldBuild = false, nextStep = null) => {
+        // Validation: Check if any field or repeater sub-field has empty label or key
+        let isValid = true;
+        let newInvalidFields = {};
+
+        fields.forEach((field, index) => {
+            if (!field.label || field.label.trim() === '' || !field.key || field.key.trim() === '') {
+                isValid = false;
+                newInvalidFields[index] = 'Label and Key cannot be empty.';
+            }
+            if (field.type === 'repeater' && field.subFields) {
+                field.subFields.forEach((subField, subIndex) => {
+                    if (!subField.label || subField.label.trim() === '' || !subField.key || subField.key.trim() === '') {
+                        isValid = false;
+                        newInvalidFields[`${index}_${subIndex}`] = 'Sub-Field Label and Key cannot be empty.';
+                    }
+                });
+            }
+        });
+
+        if (!isValid) {
+            setInvalidFields(newInvalidFields);
+            setMessage('⚠️ Validation Error: All fields and sub-fields must have a valid Field Label and Attribute Key.');
+            return;
+        }
+
+        setInvalidFields({});
         setIsSaving(true);
-        setMessage(shouldBuild ? 'Saving & Building...' : 'Saving Structure...');
+        setMessage(shouldBuild ? 'Saving & Building...' : (nextStep !== null ? 'Saving Structure & Context...' : 'Saving Structure...'));
         setCheatSheet(null); // Reset to ensure we get fresh one
 
         const data = {
@@ -296,10 +347,17 @@ const ComponentEditorApp = ({
                     if (property === 'key') {
                         value = slugifyKey(value);
                     }
-                    return {
+                    if (property === 'label') {
+                        value = slugifyLabel(value);
+                    }
+                    const updatedSubField = {
                         ...subField,
                         [property]: value
                     };
+                    if (property === 'label') {
+                        updatedSubField.key = slugifyKey(value);
+                    }
+                    return updatedSubField;
                 }
                 return subField;
             });
@@ -359,10 +417,10 @@ const ComponentEditorApp = ({
                 },
                 createElement(
                     PanelBody, {
-                        title: `${subField.label} (${subField.type})`,
-                        initialOpen: false,
-                        className: 'repeater-sub-field-settings'
-                    },
+                    title: `${subField.label} (${subField.type})`,
+                    initialOpen: false,
+                    className: 'repeater-sub-field-settings'
+                },
                     createElement(TextControl, {
                         label: "Sub-Field Label",
                         value: subField.label,
@@ -383,6 +441,17 @@ const ComponentEditorApp = ({
                         })).filter(t => t.value !== 'repeater'),
                         onChange: val => updateSubField(subIndex, 'type', val),
                     }),
+                    invalidFields[`${fieldIndex}_${subIndex}`] && createElement('div', {
+                        style: {
+                            color: '#d94f4f',
+                            fontSize: '12px',
+                            marginBottom: '10px',
+                            padding: '5px',
+                            backgroundColor: '#fbeaea',
+                            border: '1px solid #f2c7c7',
+                            borderRadius: '4px'
+                        }
+                    }, invalidFields[`${fieldIndex}_${subIndex}`]),
                     createElement(Button, {
                         isDestructive: true,
                         onClick: () => removeSubField(subIndex),
@@ -396,19 +465,19 @@ const ComponentEditorApp = ({
 
         return createElement(
             PanelBody, {
-                title: 'Repeater Sub-Fields',
-                initialOpen: true
-            },
+            title: 'Repeater Sub-Fields',
+            initialOpen: true
+        },
             // 1. Add New Sub-Field Palette
             createElement('h4', null, 'Add New Sub-Field'),
             createElement('div', {
-                    style: {
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '5px',
-                        marginBottom: '15px'
-                    }
-                },
+                style: {
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '5px',
+                    marginBottom: '15px'
+                }
+            },
                 FIELD_TYPES.filter(t => t.value !== 'repeater' && t.value !== 'relational').map(type =>
                     createElement(Button, {
                         isSecondary: true,
@@ -419,8 +488,8 @@ const ComponentEditorApp = ({
             // 2. List of Existing Sub-Fields
             createElement('h4', null, `Current Sub-Fields (${subFields.length})`),
             subFields.length > 0 ?
-            subFields.map((subField, subIndex) => renderSubFieldSettings(subField, subIndex)) :
-            createElement('p', null, 'No sub-fields defined. Add one above.')
+                subFields.map((subField, subIndex) => renderSubFieldSettings(subField, subIndex)) :
+                createElement('p', null, 'No sub-fields defined. Add one above.')
         );
     };
 
@@ -441,8 +510,8 @@ const ComponentEditorApp = ({
 
         return createElement(
             'div', {
-                className: 'gutenkit-field-settings-wrapper',
-            },
+            className: 'gutenkit-field-settings-wrapper',
+        },
             // We use a simple div for the title instead of PanelBody to remove accordion
             createElement('h3', {
                 style: {
@@ -456,10 +525,10 @@ const ComponentEditorApp = ({
             }, `Editing: ${selectedField.label} (${selectedField.type})`),
             createElement(
                 'div', {
-                    style: {
-                        marginBottom: '20px'
-                    }
-                },
+                style: {
+                    marginBottom: '20px'
+                }
+            },
                 createElement(TextControl, {
                     label: "Field Label",
                     value: selectedField.label,
@@ -476,6 +545,17 @@ const ComponentEditorApp = ({
                     value: selectedField.default,
                     onChange: val => updateField(index, 'default', val)
                 }),
+                invalidFields[index] && createElement('div', {
+                    style: {
+                        color: '#d94f4f',
+                        fontSize: '12px',
+                        marginBottom: '10px',
+                        padding: '10px',
+                        backgroundColor: '#fbeaea',
+                        border: '1px solid #f2c7c7',
+                        borderRadius: '4px'
+                    }
+                }, invalidFields[index]),
                 createElement(Button, {
                     isDestructive: true,
                     onClick: () => removeField(index),
@@ -497,21 +577,21 @@ const ComponentEditorApp = ({
     if (step === 0) {
         return createElement(
             'div', {
-                style: {
-                    marginTop: '20px'
-                }
-            },
+            style: {
+                marginTop: '20px'
+            }
+        },
             // Progress Indicator
             createElement('div', {
-                    style: {
-                        marginBottom: '20px',
-                        padding: '10px',
-                        background: '#e5e5e5',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                    }
-                },
+                style: {
+                    marginBottom: '20px',
+                    padding: '10px',
+                    background: '#e5e5e5',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }
+            },
                 createElement('h2', {
                     style: {
                         margin: 0
@@ -528,20 +608,20 @@ const ComponentEditorApp = ({
 
             createElement(
                 'div', {
-                    style: {
-                        display: 'flex',
-                        gap: '20px',
-                    }
-                },
+                style: {
+                    display: 'flex',
+                    gap: '20px',
+                }
+            },
                 // --- Left: Palette ---
                 createElement(
                     'div', {
-                        style: {
-                            width: '20%',
-                            borderRight: '1px solid #ccc',
-                            paddingRight: '20px'
-                        }
-                    },
+                    style: {
+                        width: '20%',
+                        borderRight: '1px solid #ccc',
+                        paddingRight: '20px'
+                    }
+                },
                     createElement('h3', null, 'Add Fields'),
                     FIELD_TYPES.map(type =>
                         createElement(Button, {
@@ -558,10 +638,10 @@ const ComponentEditorApp = ({
                 // --- Middle: Field List ---
                 createElement(
                     'div', {
-                        style: {
-                            width: '40%'
-                        }
-                    },
+                    style: {
+                        width: '40%'
+                    }
+                },
                     createElement('h3', null, 'Block Fields'),
                     fields.length === 0 && createElement('p', {
                         style: {
@@ -572,34 +652,34 @@ const ComponentEditorApp = ({
 
                     fields.map((field, index) =>
                         createElement('div', {
-                                key: index,
-                                draggable: true,
-                                onDragStart: (e) => handleDragStart(e, index),
-                                onDragOver: (e) => handleDragOver(e, index),
-                                onDragEnter: (e) => handleDragEnter(e, index),
-                                onDrop: (e) => handleDrop(e),
-                                style: {
-                                    padding: '10px',
-                                    marginBottom: '8px',
-                                    border: '1px solid #ddd',
-                                    backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
-                                    opacity: draggedIndex === index ? 0.5 : 1,
-                                    cursor: 'grab',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center', // Center vertically
-                                    transition: 'all 0.2s',
-                                    borderLeft: selectedField === field ? '4px solid #007cba' : '1px solid #ddd'
-                                },
-                                onClick: () => setSelectedField(field)
+                            key: index,
+                            draggable: true,
+                            onDragStart: (e) => handleDragStart(e, index),
+                            onDragOver: (e) => handleDragOver(e, index),
+                            onDragEnter: (e) => handleDragEnter(e, index),
+                            onDrop: (e) => handleDrop(e),
+                            style: {
+                                padding: '10px',
+                                marginBottom: '8px',
+                                border: '1px solid #ddd',
+                                backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
+                                opacity: draggedIndex === index ? 0.5 : 1,
+                                cursor: 'grab',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center', // Center vertically
+                                transition: 'all 0.2s',
+                                borderLeft: selectedField === field ? '4px solid #007cba' : '1px solid #ddd'
                             },
+                            onClick: () => setSelectedField(field)
+                        },
                             createElement('div', {
-                                    style: {
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px'
-                                    }
-                                },
+                                style: {
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }
+                            },
                                 createElement('span', {
                                     style: {
                                         cursor: 'grab',
@@ -631,10 +711,10 @@ const ComponentEditorApp = ({
                 // --- Right: Settings ---
                 createElement(
                     'div', {
-                        style: {
-                            width: '40%'
-                        }
-                    },
+                    style: {
+                        width: '40%'
+                    }
+                },
                     renderSettings()
                 )
             )
@@ -647,21 +727,21 @@ const ComponentEditorApp = ({
     if (step === 1) {
         return createElement(
             'div', {
-                style: {
-                    marginTop: '20px'
-                }
-            },
+            style: {
+                marginTop: '20px'
+            }
+        },
             // Progress Indicator
             createElement('div', {
-                    style: {
-                        marginBottom: '20px',
-                        padding: '10px',
-                        background: '#e5e5e5',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                    }
-                },
+                style: {
+                    marginBottom: '20px',
+                    padding: '10px',
+                    background: '#e5e5e5',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }
+            },
                 createElement(Button, {
                     isSecondary: true,
                     onClick: () => setStep(0)
@@ -681,14 +761,14 @@ const ComponentEditorApp = ({
             // --- CHEAT SHEET ---
             cheatSheet && createElement(
                 PanelBody, {
-                    title: 'Template Snippets (Use these keys in your HTML)',
-                    initialOpen: true,
-                    style: {
-                        marginBottom: '20px',
-                        background: '#f0f6fc',
-                        border: '1px solid #cce5ff'
-                    }
-                },
+                title: 'Template Snippets (Use these keys in your HTML)',
+                initialOpen: true,
+                style: {
+                    marginBottom: '20px',
+                    background: '#f0f6fc',
+                    border: '1px solid #cce5ff'
+                }
+            },
                 createElement('div', {
                     dangerouslySetInnerHTML: {
                         __html: cheatSheet
@@ -704,17 +784,17 @@ const ComponentEditorApp = ({
             ),
 
             createElement('div', {
-                    style: {
-                        display: 'flex',
-                        gap: '20px'
-                    }
-                },
+                style: {
+                    display: 'flex',
+                    gap: '20px'
+                }
+            },
                 // --- HTML Column ---
                 createElement('div', {
-                        style: {
-                            width: '50%'
-                        }
-                    },
+                    style: {
+                        width: '50%'
+                    }
+                },
                     createElement('h3', null, 'HTML Template'),
                     createElement('p', {
                         style: {
@@ -742,10 +822,10 @@ const ComponentEditorApp = ({
 
                 // --- CSS Column ---
                 createElement('div', {
-                        style: {
-                            width: '50%'
-                        }
-                    },
+                    style: {
+                        width: '50%'
+                    }
+                },
                     createElement('h3', null, 'CSS Styles'),
                     createElement('p', {
                         style: {
