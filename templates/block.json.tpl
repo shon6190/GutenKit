@@ -11,10 +11,6 @@
             "anchor": true
         },
         "attributes": {
-            "default_title": {
-                "type": "string",
-                "default": "Click 'Edit Structure' to define fields."
-            },
             "__INJECT_ATTRIBUTES_HOOK__": {}
         },
         "editorScript": "file:./index.js",

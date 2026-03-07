@@ -3,15 +3,15 @@ const path = require('path');
 const glob = require('glob');
 
 // --- Imports ---
-const { 
-    BLOCKS_SRC_DIR, 
-    TEMPLATE_FILENAME, 
-    BLOCK_JSON_FILENAME, 
-    INJECTION_MARKER, 
-    ATTRIBUTES_HOOK, 
-    ATTRIBUTES_HOOK_REGEX, 
-    FINAL_HOOK_REGEX, 
-    PACKAGE_MAP 
+const {
+    BLOCKS_SRC_DIR,
+    TEMPLATE_FILENAME,
+    BLOCK_JSON_FILENAME,
+    INJECTION_MARKER,
+    ATTRIBUTES_HOOK,
+    ATTRIBUTES_HOOK_REGEX,
+    FINAL_HOOK_REGEX,
+    PACKAGE_MAP
 } = require('./lib/constants');
 
 const { FIELD_MAP, generateRepeaterInnerJSX } = require('./lib/fields');
@@ -48,8 +48,8 @@ function generateBlock(blockPath) {
         const blockJsonStats = fs.statSync(blockJsonPath);
         const attrStats = fs.statSync(attributesOutputPath);
 
-        if (configStats.mtime < editStats.mtime && 
-            configStats.mtime < blockJsonStats.mtime && 
+        if (configStats.mtime < editStats.mtime &&
+            configStats.mtime < blockJsonStats.mtime &&
             configStats.mtime < attrStats.mtime) {
             console.log(`  ⏩ Skipping ${blockSlug} (Up to date).`);
             return;
@@ -132,9 +132,9 @@ function generateBlock(blockPath) {
     // 5. Inject Attributes into block.json
     try {
         let blockJsonContent = fs.readFileSync(blockJsonPath, 'utf8');
-        
+
         let injectionAttributes = {};
-        const reservedAttributes = ['message', 'default_title'];
+        const reservedAttributes = ['message'];
         Object.keys(generatedAttributes).forEach(key => {
             if (!reservedAttributes.includes(key)) {
                 injectionAttributes[key] = generatedAttributes[key];
@@ -155,7 +155,7 @@ function generateBlock(blockPath) {
         }
 
         finalBlockJsonContent = finalBlockJsonContent.replace(/,\s*,/g, ',').replace(/},\s*,/g, '},');
-        
+
         fs.writeFileSync(blockJsonPath, finalBlockJsonContent, 'utf8');
         console.log(` ✅ Dynamic attributes injected and saved to ${blockJsonPath}.`);
     } catch (error) {
