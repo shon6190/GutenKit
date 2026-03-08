@@ -4,13 +4,13 @@ import {
     useBlockProps, 
     RichText, 
     InspectorControls 
-    // __INJECT_BLOCK_EDITOR_IMPORTS__  <-- Your script should add MediaUpload, MediaUploadCheck here
+    // __INJECT_BLOCK_EDITOR_IMPORTS__
 } from '@wordpress/block-editor'; 
 
 // This line handles all standard UI components (TextControl, Button, PanelBody, etc.)
 import { 
     PanelBody 
-    // __INJECT_COMPONENTS_IMPORTS__  <-- Your script should add TextControl, Button, ToggleControl, etc. here
+    // __INJECT_COMPONENTS_IMPORTS__
 } from '@wordpress/components';
 
 const Edit = ( { attributes, setAttributes } ) => {

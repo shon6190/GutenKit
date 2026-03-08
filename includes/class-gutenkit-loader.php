@@ -39,6 +39,7 @@ class GutenKit_Loader
 	{
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-register.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-generator.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-ai.php';
 
 		if (is_admin()) {
 			require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-admin.php';
@@ -52,6 +53,9 @@ class GutenKit_Loader
 
 		// Instantiate Generator (AJAX handlers)
 		$generator = new GutenKit_Generator();
+
+		// Instantiate AI Module
+		$ai = new GutenKit_AI();
 
 		// Instantiate Admin UI
 		if (is_admin()) {

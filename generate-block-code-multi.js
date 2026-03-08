@@ -164,7 +164,8 @@ function generateBlock(blockPath) {
 
     // 6. Generate Edit.js
     try {
-        let templateContent = fs.readFileSync(templatePath, 'utf8');
+        const tplPath = path.join(__dirname, 'templates/edit.js.tpl');
+        let templateContent = fs.readFileSync(tplPath, 'utf8');
 
         // Generate Preview
         let canvasPreviewJsx = '<p>No preview template found.</p>';

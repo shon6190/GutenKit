@@ -953,9 +953,9 @@ class GutenKit_Generator
 		}
 
 		// Regex to find loops
-		// Matches {{#key}} ... {{/key}}
+		// Matches {{#key}} or {{#each key}} ... {{/key}} or {{/each}}
 		// format: {{#key}} content {{/key}}
-		$js_safe_template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields, $placeholder) {
+		$js_safe_template = preg_replace_callback('/\{\{#(?:each\s+)?(\w+)\}\}(.*?)\{\{\/(?:\1|each)\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields, $placeholder) {
 			$loop_key = $matches[1];
 			$inner_content = $matches[2];
 
@@ -1058,8 +1058,8 @@ class GutenKit_Generator
 		}
 
 		// Regex to find loops
-		// Matches {{#key}} ... {{/key}}
-		$template = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields, $placeholder) {
+		// Matches {{#key}} or {{#each key}} ... {{/key}} or {{/each}}
+		$template = preg_replace_callback('/\{\{#(?:each\s+)?(\w+)\}\}(.*?)\{\{\/(?:\1|each)\}\}/s', function ($matches) use ($repeater_fields, $gallery_fields, $placeholder) {
 			$loop_key = $matches[1];
 			$inner_content = $matches[2];
 
@@ -1103,7 +1103,7 @@ class GutenKit_Generator
 				switch ($sType) {
 					case 'image':
 					case 'file':
-						$php_replacement = "<?php echo esc_url(\$item['$sKey']['url'] ?? '$placeholder'); ?>";
+						$php_replacement = "<?php echo esc_url(!empty(\$item['$sKey']['url']) ? \$item['$sKey']['url'] : '$placeholder'); ?>";
 						// Handle Alt: {{key_alt}}
 						$alt_replacement = "<?php echo esc_attr(\$item['$sKey']['alt'] ?? \$item['$sKey']['filename'] ?? ''); ?>";
 						$inner_content = preg_replace('/\{\{\s*' . preg_quote($sKey . '_alt', '/') . '\s*\}\}/', $alt_replacement, $inner_content);
@@ -1124,9 +1124,9 @@ class GutenKit_Generator
 						$php_replacement = "<?php echo esc_attr(\$item['$sKey'] ?? ''); ?>";
 						break;
 					case 'gallery':
-						// 1. Support nested loop: {{#gallery_key}} ... {{/gallery_key}}
+						// 1. Support nested loop: {{#gallery_key}} or {{#each gallery_key}} ... {{/gallery_key}} or {{/each}}
 						// We look for this pattern inside $inner_content
-						$inner_content = preg_replace_callback('/\{\{#' . preg_quote($sKey, '/') . '\}\}(.*?)\{\{\/' . preg_quote($sKey, '/') . '\}\}/s', function ($gMatches) use ($sKey) {
+						$inner_content = preg_replace_callback('/\{\{#(?:each\s+)?' . preg_quote($sKey, '/') . '\}\}(.*?)\{\{\/(?:' . preg_quote($sKey, '/') . '|each)\}\}/s', function ($gMatches) use ($sKey) {
 							$gInner = $gMatches[1];
 							$gInner = str_replace('{{url}}', '<?php echo esc_url($gItem[\'url\'] ?? \'\'); ?>', $gInner);
 							$gInner = str_replace('{{alt}}', '<?php echo esc_attr($gItem[\'alt\'] ?? \'\'); ?>', $gInner);
@@ -1178,7 +1178,7 @@ class GutenKit_Generator
 				case 'image':
 				case 'file':
 					// Default to URL so it can be used in src="" attributes
-					$php = "<?php echo esc_url(\$attributes['$key']['url'] ?? '$placeholder'); ?>";
+					$php = "<?php echo esc_url(!empty(\$attributes['$key']['url']) ? \$attributes['$key']['url'] : '$placeholder'); ?>";
 					// Handle Alt: {{key_alt}}
 					$alt_php = "<?php echo esc_attr(\$attributes['$key']['alt'] ?? \$attributes['$key']['filename'] ?? ''); ?>";
 					$template = str_replace('{{' . $key . '_alt}}', $alt_php, $template);
@@ -1255,7 +1255,7 @@ class GutenKit_Generator
 
 			if ($type === 'repeater') {
 				$lines[] = "<em>Loop:</em><br>";
-				$lines[] = "<code>{{#$key}}</code><br>";
+				$lines[] = "<code>{{#each $key}}</code><br>";
 
 				if (isset($field['subFields'])) {
 					foreach ($field['subFields'] as $sub) {
@@ -1264,9 +1264,9 @@ class GutenKit_Generator
 
 						if ($sType === 'gallery') {
 							$lines[] = "&nbsp;&nbsp; <em>Gallery Loop:</em><br>";
-							$lines[] = "&nbsp;&nbsp; <code>{{#$sKey}}</code><br>";
+							$lines[] = "&nbsp;&nbsp; <code>{{#each $sKey}}</code><br>";
 							$lines[] = "&nbsp;&nbsp;&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
-							$lines[] = "&nbsp;&nbsp; <code>{{/$sKey}}</code><br>";
+							$lines[] = "&nbsp;&nbsp; <code>{{/each}}</code><br>";
 						} else {
 							$lines[] = "&nbsp;&nbsp; {{{$sKey}}} <small>($sType)</small><br>";
 							if ($sType === 'image' || $sType === 'file') {
@@ -1276,12 +1276,12 @@ class GutenKit_Generator
 					}
 				}
 
-				$lines[] = "<code>{{/$key}}</code>";
+				$lines[] = "<code>{{/each}}</code>";
 			} elseif ($type === 'gallery') {
 				$lines[] = "<em>Loop (Gallery):</em><br>";
-				$lines[] = "<code>{{#$key}}</code><br>";
+				$lines[] = "<code>{{#each $key}}</code><br>";
 				$lines[] = "&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
-				$lines[] = "<code>{{/$key}}</code>";
+				$lines[] = "<code>{{/each}}</code>";
 			} elseif ($type === 'image' || $type === 'file') {
 				$lines[] = "URL: <code>{{{$key}}}</code><br>";
 				$lines[] = "Alt/Filename: <code>{{{$key}_alt}}</code>";
