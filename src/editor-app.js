@@ -112,6 +112,10 @@ const ComponentEditorApp = ({
     // --- Validation State ---
     const [invalidFields, setInvalidFields] = useState({});
 
+    // --- AI Generator State ---
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+
     // --- Drag and Drop State ---
     const [draggedIndex, setDraggedIndex] = useState(null);
     const [draggedSubIndex, setDraggedSubIndex] = useState(null); // NEW: Sub-field drag state
@@ -223,6 +227,41 @@ const ComponentEditorApp = ({
             textarea.focus();
             textarea.setSelectionRange(start + tag.length, start + tag.length);
         }, 10);
+    };
+
+    // --- AJAX AI Generator ---
+    const handleGenerateAI = () => {
+        if (!aiPrompt.trim()) {
+            setMessage('⚠️ Please enter a prompt for the AI.');
+            return;
+        }
+
+        setIsGenerating(true);
+        setMessage('✨ AI is generating your template...');
+
+        const data = {
+            action: 'bf_generate_ai_template',
+            nonce: blockFactoryEditor.nonce,
+            prompt: aiPrompt,
+            fields: JSON.stringify(fields)
+        };
+
+        jQuery.post(ajaxurl, data)
+            .done(response => {
+                if (response.success) {
+                    setTemplate(response.data.html || '');
+                    setCss(response.data.css || '');
+                    setMessage('✅ AI Generation Complete!');
+                } else {
+                    setMessage(`❌ AI Error: ${response.data.message || 'Unknown error'}`);
+                }
+            })
+            .fail((xhr, status, error) => {
+                setMessage(`❌ Critical Error: Could not reach the server for AI generation. ${error}`);
+            })
+            .always(() => {
+                setIsGenerating(false);
+            });
     };
 
     // --- AJAX Build Trigger ---
@@ -783,6 +822,70 @@ const ComponentEditorApp = ({
                 })
             ),
 
+            // --- AI GENERATOR UI ---
+            createElement(
+                PanelBody, {
+                title: '✨ AI Template Generator',
+                initialOpen: true,
+                style: {
+                    marginBottom: '20px',
+                    background: '#f8f9fa',
+                    border: '1px solid #e2e4e7',
+                    borderRadius: '4px'
+                }
+            },
+                createElement('p', { style: { fontSize: '13px', margin: '0 0 10px 0', color: '#666' } },
+                    'Describe the layout you want to build. The AI will look at your fields and generate the HTML & CSS automatically.'
+                ),
+                createElement('textarea', {
+                    value: aiPrompt,
+                    onChange: (e) => setAiPrompt(e.target.value),
+                    placeholder: 'E.g., "Create a two-column card with the image on the left and title on the right. Make it look modern with a subtle drop shadow."',
+                    style: {
+                        width: '100%',
+                        minHeight: '80px',
+                        padding: '10px',
+                        marginBottom: '10px',
+                        fontFamily: 'inherit',
+                        border: '1px solid #8c8f94',
+                        borderRadius: '4px',
+                        fontSize: '14px'
+                    }
+                }),
+                createElement(
+                    'div',
+                    { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    createElement(Button, {
+                        isPrimary: true,
+                        isBusy: isGenerating,
+                        onClick: handleGenerateAI,
+                        style: { background: '#8a2be2', borderColor: '#8a2be2', color: '#fff' }
+                    }, isGenerating ? '✨ Generating...' : '✨ Generate with AI'),
+
+                    createElement('a', {
+                        href: 'admin.php?page=gutenkit-ai-settings',
+                        target: '_blank',
+                        style: { fontSize: '12px', color: '#007cba', textDecoration: 'none' }
+                    }, '⚙️ AI Settings (API Keys)')
+                ),
+
+                // AI Generation Message Moved Here
+                message && message.includes('AI') && createElement('div', {
+                    style: {
+                        marginTop: '15px',
+                        padding: '10px 15px',
+                        backgroundColor: message.includes('✅') ? '#d4edda' : (message.includes('✨') ? '#e2e3e5' : '#f8d7da'),
+                        color: message.includes('✅') ? '#155724' : (message.includes('✨') ? '#383d41' : '#721c24'),
+                        border: '1px solid',
+                        borderColor: message.includes('✅') ? '#c3e6cb' : (message.includes('✨') ? '#d6d8db' : '#f5c6cb'),
+                        borderRadius: '4px',
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        fontSize: '13px'
+                    }
+                }, message)
+            ),
+
             createElement('div', {
                 style: {
                     display: 'flex',
@@ -851,13 +954,41 @@ const ComponentEditorApp = ({
                 )
             ),
 
+            // --- LIVE PREVIEW COLUMN ---
+            createElement('div', {
+                style: { marginTop: '30px' }
+            },
+                createElement('h3', null, 'Live Preview'),
+                createElement('p', { style: { fontSize: '12px', color: '#666' } }, 'This is a rough preview of the generated HTML and CSS. Mustache tags are not evaluated here.'),
+                createElement('div', {
+                    style: {
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        padding: '20px',
+                        minHeight: '200px',
+                        backgroundColor: '#fff',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }
+                },
+                    // Inject CSS
+                    createElement('style', null, css ? css.replace(/\.gk-block-wrapper/g, '.gutenkit-live-preview-wrapper') : ''),
+                    // Inject HTML inside a wrapper
+                    createElement('div', {
+                        className: 'gutenkit-live-preview-wrapper',
+                        dangerouslySetInnerHTML: { __html: template || '<p style="color:#aaa;text-align:center;font-style:italic;margin-top:80px;">Preview will appear here...</p>' }
+                    })
+                )
+            ),
+
             createElement('hr', {
                 style: {
-                    margin: '20px 0'
+                    margin: '30px 0 20px'
                 }
             }),
 
-            message && createElement('div', {
+            // General Save Message (Non-AI)
+            message && !message.includes('AI') && createElement('div', {
                 style: {
                     padding: '15px',
                     backgroundColor: message.includes('✅') ? '#d4edda' : '#f8d7da',
