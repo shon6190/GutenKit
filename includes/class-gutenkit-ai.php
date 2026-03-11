@@ -38,6 +38,8 @@ class GutenKit_AI
     {
         register_setting('gutenkit_ai_settings_group', 'gutenkit_openai_api_key');
         register_setting('gutenkit_ai_settings_group', 'gutenkit_gemini_api_key');
+        register_setting('gutenkit_ai_settings_group', 'gutenkit_groq_api_key');
+        register_setting('gutenkit_ai_settings_group', 'gutenkit_openrouter_api_key');
     }
 
     public function render_settings_page()
@@ -72,6 +74,24 @@ class GutenKit_AI
                                     target="_blank">Google AI Studio</a>.</p>
                         </td>
                     </tr>
+                    <tr valign="top">
+                        <th scope="row">Groq API Key</th>
+                        <td>
+                            <input type="password" name="gutenkit_groq_api_key"
+                                value="<?php echo esc_attr(get_option('gutenkit_groq_api_key')); ?>"
+                                style="width:100%; max-width:400px;" />
+                            <p class="description">Llama 3 70b models. High rate limit. Get your key from <a href="https://console.groq.com/keys" target="_blank">Groq Console</a>.</p>
+                        </td>
+                    </tr>
+                    <tr valign="top">
+                        <th scope="row">OpenRouter API Key</th>
+                        <td>
+                            <input type="password" name="gutenkit_openrouter_api_key"
+                                value="<?php echo esc_attr(get_option('gutenkit_openrouter_api_key')); ?>"
+                                style="width:100%; max-width:400px;" />
+                            <p class="description">Free Llama 3 models available. Get your key from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a>.</p>
+                        </td>
+                    </tr>
                 </table>
 
                 <?php submit_button('Save API Keys'); ?>
@@ -79,11 +99,8 @@ class GutenKit_AI
 
             <hr>
             <h2>✨ Free Tier Available</h2>
-            <p>Don't want to pay for API usage while building blocks? <strong>Google Gemini offers a generous Free
-                    Tier</strong>!</p>
-            <p>By creating a free API key in Google AI Studio, you get access to the Gemini 1.5/2.0 Flash models with rate
-                limits of approximately <strong>15 requests per minute</strong> completely free of charge. This is usually more
-                than enough for building custom blocks!</p>
+            <p>Don't want to pay for API usage while building blocks? <strong>Groq, OpenRouter, and Google Gemini offer generous Free Tiers</strong>!</p>
+            <p>Groq provides up to 30 requests per minute completely free, while OpenRouter provides free Llama 3 models without any credit requirements.</p>
 
         </div>
         <?php
@@ -109,20 +126,28 @@ class GutenKit_AI
         }
 
         // 4. API Key Resolution
+        $groq_key = get_option('gutenkit_groq_api_key');
+        $openrouter_key = get_option('gutenkit_openrouter_api_key');
         $openai_key = get_option('gutenkit_openai_api_key');
         $gemini_key = get_option('gutenkit_gemini_api_key');
 
         $provider = '';
         $api_key = '';
 
-        if (!empty($openai_key)) {
+        if (!empty($groq_key)) {
+            $provider = 'groq';
+            $api_key = $groq_key;
+        } elseif (!empty($openrouter_key)) {
+            $provider = 'openrouter';
+            $api_key = $openrouter_key;
+        } elseif (!empty($openai_key)) {
             $provider = 'openai';
             $api_key = $openai_key;
         } elseif (!empty($gemini_key)) {
             $provider = 'gemini';
             $api_key = $gemini_key;
         } else {
-            wp_send_json_error(array('message' => 'To use the AI Template Generator, please enter your free OpenAI or Gemini API Key in the GutenKit Settings.'));
+            wp_send_json_error(array('message' => 'To use the AI Template Generator, please enter your free Groq, OpenRouter, OpenAI, or Gemini API Key in the GutenKit Settings.'));
         }
 
         // 5. Build System Prompt
@@ -136,7 +161,11 @@ class GutenKit_AI
         $system_message .= "5. Wrap the main HTML in a div with a unique class (e.g. .gk-block-wrapper) and namespace the CSS to that class so it doesn't affect the rest of the site.\n";
 
         // 6. Call the appropriate API
-        if ($provider === 'openai') {
+        if ($provider === 'groq') {
+            $result = $this->call_groq($api_key, $system_message, $prompt);
+        } elseif ($provider === 'openrouter') {
+            $result = $this->call_openrouter($api_key, $system_message, $prompt);
+        } elseif ($provider === 'openai') {
             $result = $this->call_openai($api_key, $system_message, $prompt);
         } elseif ($provider === 'gemini') {
             $result = $this->call_gemini($api_key, $system_message, $prompt);
@@ -260,5 +289,82 @@ class GutenKit_AI
         return '';
     }
 
+    private function call_groq($api_key, $system_message, $prompt)
+    {
+        $url = 'https://api.groq.com/openai/v1/chat/completions';
+        $body = wp_json_encode(array(
+            'model' => 'llama3-70b-8192',
+            'messages' => array(
+                array('role' => 'system', 'content' => $system_message),
+                array('role' => 'user', 'content' => $prompt),
+            ),
+            'temperature' => 0.2, // Low temp for more deterministic code
+        ));
 
+        $args = array(
+            'body' => $body,
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json',
+            ),
+            'timeout' => 60,
+        );
+
+        $response = wp_remote_post($url, $args);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (isset($data['error'])) {
+            return new WP_Error('api_error', $data['error']['message']);
+        }
+
+        return isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
+    }
+
+    private function call_openrouter($api_key, $system_message, $prompt)
+    {
+        $url = 'https://openrouter.ai/api/v1/chat/completions';
+        $body = wp_json_encode(array(
+            'model' => 'openrouter/auto', // Will auto-route to a free model if available, falling back to a paid model
+            'messages' => array(
+                array('role' => 'system', 'content' => $system_message),
+                array('role' => 'user', 'content' => $prompt),
+            ),
+            'temperature' => 0.2, // Low temp for more deterministic code
+        ));
+
+        $args = array(
+            'body' => $body,
+            'headers' => array(
+                'Authorization' => 'Bearer ' . $api_key,
+                'Content-Type' => 'application/json',
+                'HTTP-Referer' => site_url(), // OpenRouter requires referer
+            ),
+            'timeout' => 60,
+        );
+
+        $response = wp_remote_post($url, $args);
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (isset($data['error'])) {
+            $err_msg = isset($data['error']['message']) ? $data['error']['message'] : 'Unknown error';
+            if (isset($data['error']['metadata'])) {
+                $err_msg .= ' (' . wp_json_encode($data['error']['metadata']) . ')';
+            }
+            return new WP_Error('api_error', $err_msg);
+        }
+
+        return isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
+    }
 }
