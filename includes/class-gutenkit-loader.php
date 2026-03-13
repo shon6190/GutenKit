@@ -70,9 +70,30 @@ class GutenKit_Loader
 			define('BLOCK_FACTORY_PATH', plugin_dir_path(dirname(__FILE__)));
 		}
 
-		// Check if node_modules exists
-		if (!file_exists(BLOCK_FACTORY_PATH . 'node_modules')) {
+		$node_modules = BLOCK_FACTORY_PATH . 'node_modules';
+		$pkg_json     = BLOCK_FACTORY_PATH . 'package.json';
+		$hash_file    = BLOCK_FACTORY_PATH . '.npm_pkg_hash';
+
+		// Determine whether an install is actually needed:
+		// 1. node_modules directory is missing, OR
+		// 2. package.json has changed since the last successful install
+		$needs_install = ! is_dir( $node_modules );
+
+		if ( ! $needs_install && file_exists( $pkg_json ) ) {
+			$current_hash = md5_file( $pkg_json );
+			$stored_hash  = file_exists( $hash_file ) ? trim( file_get_contents( $hash_file ) ) : ''; // phpcs:ignore
+			if ( $current_hash !== $stored_hash ) {
+				$needs_install = true;
+			}
+		}
+
+		if ( $needs_install ) {
 			self::install_dependencies();
+
+			// Record the package.json hash so future activations skip redundant installs
+			if ( file_exists( $pkg_json ) ) {
+				file_put_contents( $hash_file, md5_file( $pkg_json ) ); // phpcs:ignore
+			}
 		}
 	}
 

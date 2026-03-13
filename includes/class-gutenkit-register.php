@@ -35,9 +35,13 @@ class GutenKit_Register
 			$blocks_data = $cached_blocks;
 		}
 
-		// 2. Register each block
+		// 2. Register each block — isolated so one bad block won't break the rest
 		foreach ($blocks_data as $block) {
-			$this->register_single_block($block);
+			try {
+				$this->register_single_block($block);
+			} catch ( Throwable $e ) {
+				$this->log_registration_error( $block['slug'] ?? 'unknown', 'Outer catch: ' . $e->getMessage() );
+			}
 		}
 	}
 
@@ -80,11 +84,22 @@ class GutenKit_Register
 			return;
 		}
 
-		register_block_type_from_metadata($path, array(
-			'render_callback' => function ($attributes, $content) use ($slug) {
-				return $this->render_block($slug, $attributes, $content);
-			}
-		));
+		try {
+			register_block_type_from_metadata($path, array(
+				'render_callback' => function ($attributes, $content) use ($slug) {
+					return $this->render_block($slug, $attributes, $content);
+				}
+			));
+		} catch ( Throwable $e ) {
+			$this->log_registration_error( $slug, $e->getMessage() );
+		}
+	}
+
+	private function log_registration_error( $slug, $message ) {
+		$log_path = BLOCK_FACTORY_PATH . 'gutenkit-debug.log';
+		$entry    = '[' . gmdate( 'Y-m-d H:i:s' ) . '] [block: ' . $slug . '] ' . $message . PHP_EOL;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		file_put_contents( $log_path, $entry, FILE_APPEND | LOCK_EX );
 	}
 
 	public function render_block($slug, $attributes, $content)

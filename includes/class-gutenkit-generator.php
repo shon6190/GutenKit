@@ -71,19 +71,25 @@ class GutenKit_Generator
 			'render.php.tpl' => 'render.php',
 		);
 
+		$fs = $this->get_filesystem();
+
 		foreach ($templates as $template_file => $output_file) {
 			$template_path = BLOCK_FACTORY_PATH . 'templates/' . $template_file;
 			if (!file_exists($template_path)) {
 				error_log("GutenKit: Missing template " . $template_path);
 				continue;
 			}
-			$file_content = file_get_contents($template_path);
+			$file_content  = $fs ? $fs->get_contents($template_path) : file_get_contents($template_path);
 			$final_content = str_replace(
 				array_keys($placeholders),
 				array_values($placeholders),
 				$file_content
 			);
-			file_put_contents($new_block_dir . $output_file, $final_content);
+			if ($fs) {
+				$fs->put_contents($new_block_dir . $output_file, $final_content, FS_CHMOD_FILE);
+			} else {
+				file_put_contents($new_block_dir . $output_file, $final_content);
+			}
 		}
 
 		// Invalidate Cache
@@ -95,7 +101,7 @@ class GutenKit_Generator
 	}
 
 	/**
-	 * Handle Config Save (AJAX)
+	 * Handle Config Save (AJAX) — with WP_Filesystem writes and automatic rollback on failure.
 	 */
 	public function handle_save_structure()
 	{
@@ -107,7 +113,7 @@ class GutenKit_Generator
 			wp_send_json_error(array('message' => 'Security check failed.'));
 		}
 
-		$block_slug = sanitize_title($_POST['block_slug']);
+		$block_slug       = sanitize_title($_POST['block_slug']);
 		$config_data_json = isset($_POST['config_data']) ? wp_unslash($_POST['config_data']) : '';
 
 		if (empty($block_slug) || empty($config_data_json)) {
@@ -120,40 +126,88 @@ class GutenKit_Generator
 			wp_send_json_error(array('message' => 'Invalid JSON.'));
 		}
 
-		$path = BLOCKS_BASE_PATH . $block_slug . '/config.json';
-		$success = file_put_contents($path, wp_json_encode($config_data, JSON_PRETTY_PRINT)) !== false;
+		$block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
+		$fs        = $this->get_filesystem();
 
-		if ($success) {
-			// Update related files
-			$this->update_block_json($block_slug, $config_data);
-			$this->regenerate_edit_js($block_slug, $config_data);
+		// Selective rebuild: compare incoming config hash to last-saved hash
+		$new_hash    = md5($config_data_json);
+		$hash_file   = $block_dir . '.config_hash';
+		$stored_hash = ($fs && $fs->exists($hash_file)) ? trim($fs->get_contents($hash_file)) : '';
 
-			// Generate render.php if template is provided
-			if (isset($config_data['template'])) {
-				$this->generate_render_php($block_slug, $config_data);
+		// Backup existing files before any writes so we can roll back if needed
+		$files_to_protect = array('config.json', 'block.json', 'edit.js', 'render.php', 'style.scss');
+		$backup_dir       = $block_dir . '.backup_' . time() . '/';
+		$backup_created   = $this->backup_block_files($block_dir, $backup_dir, $files_to_protect);
+
+		// Write config.json via WP_Filesystem
+		$config_json   = wp_json_encode($config_data, JSON_PRETTY_PRINT);
+		$config_path   = $block_dir . 'config.json';
+		$write_success = $fs
+			? $fs->put_contents($config_path, $config_json, FS_CHMOD_FILE)
+			: (file_put_contents($config_path, $config_json) !== false);
+
+		if (!$write_success) {
+			if ($backup_created) {
+				$this->restore_from_backup($backup_dir, $block_dir, $files_to_protect);
+				$this->cleanup_backup($backup_dir);
 			}
-
-			// Generate Cheat Sheet (Info for Admin)
-			$cheat_sheet_html = '';
-			if (isset($config_data['fields'])) {
-				$cheat_sheet_html = $this->generate_data_cheat_sheet($block_slug, $config_data['fields']);
-			}
-
-			// Generate style.scss if css is provided
-			if (isset($config_data['css'])) {
-				$style_scss_path = BLOCKS_BASE_PATH . $block_slug . '/style.scss';
-				// We overwrite style.scss with the user's CSS/SCSS
-				file_put_contents($style_scss_path, $config_data['css']);
-			}
-
-			wp_send_json_success(array(
-				'message' => 'Block structure saved!',
-				'next_step' => 'Run build.',
-				'cheat_sheet' => $cheat_sheet_html
-			));
-		} else {
-			wp_send_json_error(array('message' => 'Failed to write config file.'));
+			wp_send_json_error(array('message' => 'Failed to write config file. Check folder permissions.'));
 		}
+
+		// Regenerate block files only when the config has actually changed
+		if ($new_hash !== $stored_hash) {
+			try {
+				$this->update_block_json($block_slug, $config_data);
+				$this->regenerate_edit_js($block_slug, $config_data);
+
+				if (isset($config_data['template'])) {
+					$this->generate_render_php($block_slug, $config_data);
+				}
+
+				if (isset($config_data['css'])) {
+					$style_path = $block_dir . 'style.scss';
+					if ($fs) {
+						$fs->put_contents($style_path, $config_data['css'], FS_CHMOD_FILE);
+					} else {
+						file_put_contents($style_path, $config_data['css']);
+					}
+				}
+			} catch (Throwable $e) {
+				// Roll back every file to its pre-save state
+				if ($backup_created) {
+					$this->restore_from_backup($backup_dir, $block_dir, $files_to_protect);
+					$this->cleanup_backup($backup_dir);
+				}
+				$this->log_generator_error($block_slug, 'Save rolled back — ' . $e->getMessage());
+				wp_send_json_error(array(
+					'message' => 'Save failed and was rolled back. Error: ' . $e->getMessage(),
+				));
+			}
+
+			// Persist the new hash so identical future saves skip regeneration
+			if ($fs) {
+				$fs->put_contents($hash_file, $new_hash, FS_CHMOD_FILE);
+			} else {
+				file_put_contents($hash_file, $new_hash);
+			}
+		}
+
+		// Clean up the safety backup — all writes succeeded
+		if ($backup_created) {
+			$this->cleanup_backup($backup_dir);
+		}
+
+		$cheat_sheet_html = '';
+		if (isset($config_data['fields'])) {
+			$cheat_sheet_html = $this->generate_data_cheat_sheet($block_slug, $config_data['fields']);
+		}
+
+		$unchanged_note = ($new_hash === $stored_hash) ? ' (files already up to date, skipped regeneration)' : '';
+		wp_send_json_success(array(
+			'message'     => 'Block structure saved!' . $unchanged_note,
+			'next_step'   => 'Run build.',
+			'cheat_sheet' => $cheat_sheet_html,
+		));
 	}
 
 	/**
@@ -257,7 +311,9 @@ class GutenKit_Generator
 			return;
 		}
 
-		$block_meta = json_decode(file_get_contents($json_path), true);
+		$fs         = $this->get_filesystem();
+		$raw        = $fs ? $fs->get_contents($json_path) : file_get_contents($json_path);
+		$block_meta = json_decode($raw, true);
 
 		if (!isset($block_meta['attributes'])) {
 			$block_meta['attributes'] = [];
@@ -286,20 +342,26 @@ class GutenKit_Generator
 			$block_meta['attributes'][$key] = $attr_definition;
 		}
 
-		file_put_contents($json_path, json_encode($block_meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+		$encoded = json_encode($block_meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+		if ($fs) {
+			$fs->put_contents($json_path, $encoded, FS_CHMOD_FILE);
+		} else {
+			file_put_contents($json_path, $encoded);
+		}
 	}
 
 	private function regenerate_edit_js($block_slug, $config_data)
 	{
-		$block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
+		$block_dir     = BLOCKS_BASE_PATH . $block_slug . '/';
 		$template_path = BLOCK_FACTORY_PATH . 'templates/edit.js.tpl';
-		$edit_js_path = $block_dir . 'edit.js';
+		$edit_js_path  = $block_dir . 'edit.js';
 
 		if (!file_exists($template_path)) {
 			return false;
 		}
 
-		$template = file_get_contents($template_path);
+		$fs       = $this->get_filesystem();
+		$template = $fs ? $fs->get_contents($template_path) : file_get_contents($template_path);
 		$fields = $config_data['fields'];
 		$block_template = isset($config_data['template']) ? $config_data['template'] : '';
 
@@ -365,6 +427,9 @@ class GutenKit_Generator
 		];
 
 		$final_js = str_replace(array_keys($replacements), array_values($replacements), $template);
+		if ($fs) {
+			return $fs->put_contents($edit_js_path, $final_js, FS_CHMOD_FILE) !== false;
+		}
 		return file_put_contents($edit_js_path, $final_js) !== false;
 	}
 
@@ -1232,10 +1297,15 @@ class GutenKit_Generator
 		$file_content .= "    }\n";
 		$file_content .= "}\n?>";
 
-		if (!file_exists($block_dir)) {
-			mkdir($block_dir, 0755, true);
+		if (!is_dir($block_dir)) {
+			wp_mkdir_p($block_dir);
 		}
-		file_put_contents($block_dir . '/render.php', $file_content);
+		$fs = $this->get_filesystem();
+		if ($fs) {
+			$fs->put_contents($block_dir . '/render.php', $file_content, FS_CHMOD_FILE);
+		} else {
+			file_put_contents($block_dir . '/render.php', $file_content);
+		}
 	}
 
 	private function generate_data_cheat_sheet($slug, $fields)
@@ -1301,6 +1371,93 @@ class GutenKit_Generator
 		file_put_contents($block_dir . '/cheat_sheet.html', $content);
 
 		return $content; // Return content for immediate display
+	}
+
+	// =========================================================
+	// Infrastructure helpers: filesystem, backup/restore, logging
+	// =========================================================
+
+	/**
+	 * Returns an initialised WP_Filesystem instance (direct method for local sites).
+	 * Falls back to null if WP_Filesystem is unavailable.
+	 */
+	private function get_filesystem()
+	{
+		global $wp_filesystem;
+		if (empty($wp_filesystem)) {
+			if (!function_exists('WP_Filesystem')) {
+				require_once ABSPATH . 'wp-admin/includes/file.php';
+			}
+			WP_Filesystem();
+		}
+		return ($wp_filesystem instanceof WP_Filesystem_Base) ? $wp_filesystem : null;
+	}
+
+	/**
+	 * Copies listed files from $source_dir to $backup_dir.
+	 * Only copies files that actually exist; returns true if at least one was backed up.
+	 */
+	private function backup_block_files($source_dir, $backup_dir, array $files)
+	{
+		$fs         = $this->get_filesystem();
+		$backed_up  = false;
+
+		if (!is_dir($backup_dir)) {
+			wp_mkdir_p($backup_dir);
+		}
+
+		foreach ($files as $file) {
+			$src = $source_dir . $file;
+			if (file_exists($src)) {
+				if ($fs) {
+					$fs->copy($src, $backup_dir . $file, true);
+				} else {
+					copy($src, $backup_dir . $file);
+				}
+				$backed_up = true;
+			}
+		}
+
+		return $backed_up;
+	}
+
+	/**
+	 * Restores files from $backup_dir back to $target_dir.
+	 */
+	private function restore_from_backup($backup_dir, $target_dir, array $files)
+	{
+		$fs = $this->get_filesystem();
+		foreach ($files as $file) {
+			$src = $backup_dir . $file;
+			if (file_exists($src)) {
+				if ($fs) {
+					$fs->copy($src, $target_dir . $file, true);
+				} else {
+					copy($src, $target_dir . $file);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Removes a backup directory created by backup_block_files().
+	 */
+	private function cleanup_backup($backup_dir)
+	{
+		if (is_dir($backup_dir)) {
+			$this->delete_dir_recursive($backup_dir);
+		}
+	}
+
+	/**
+	 * Appends a timestamped entry to gutenkit-debug.log.
+	 */
+	private function log_generator_error($context, $message)
+	{
+		$log_path = BLOCK_FACTORY_PATH . 'gutenkit-debug.log';
+		$entry    = '[' . gmdate('Y-m-d H:i:s') . '] [' . $context . '] ' . $message . PHP_EOL;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
+		file_put_contents($log_path, $entry, FILE_APPEND | LOCK_EX);
 	}
 
 	private function delete_dir_recursive($dir)
@@ -1409,6 +1566,7 @@ class GutenKit_Generator
 
 	/**
 	 * Handle Install Dependencies (AJAX)
+	 * Skips execution if node_modules already exists and package.json is unchanged.
 	 */
 	public function handle_install_dependencies()
 	{
@@ -1418,37 +1576,56 @@ class GutenKit_Generator
 			wp_send_json_error(['message' => 'Permission denied.']);
 		}
 
-		$node_dir = $this->detect_node_environment()['node_dir'];
-		$plugin_dir = BLOCK_FACTORY_PATH;
+		$plugin_dir   = BLOCK_FACTORY_PATH;
+		$pkg_json     = $plugin_dir . 'package.json';
+		$hash_file    = $plugin_dir . '.npm_pkg_hash';
+		$node_modules = $plugin_dir . 'node_modules';
 
-		// Prepare Command
-		$cmd_prefix = '';
+		// Only install if node_modules is missing or package.json has changed
+		$needs_install = !is_dir($node_modules);
+		if (!$needs_install && file_exists($pkg_json)) {
+			$current_hash = md5_file($pkg_json);
+			$stored_hash  = file_exists($hash_file) ? trim(file_get_contents($hash_file)) : ''; // phpcs:ignore
+			if ($current_hash !== $stored_hash) {
+				$needs_install = true;
+			}
+		}
 
-		// Add Node to PATH for this command execution
+		if (!$needs_install) {
+			wp_send_json_success([
+				'message' => 'Dependencies are already up to date. Skipped install.',
+				'output'  => '',
+			]);
+		}
+
+		$node_env = $this->detect_node_environment();
+		$node_dir = $node_env['node_dir'];
+
 		if ($node_dir) {
-			$path_sep = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') ? ';' : ':';
+			$path_sep     = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') ? ';' : ':';
 			$current_path = getenv('PATH');
 			putenv("PATH=$node_dir$path_sep$current_path");
 		}
 
-		// Command to run
 		$cmd = "cd " . escapeshellarg($plugin_dir) . " && npm install 2>&1";
-
-		// Exec
 		exec($cmd, $output, $return_var);
 
 		$output_str = implode("\n", $output);
 
 		if ($return_var === 0) {
+			// Record hash so future activations/installs can skip if unchanged
+			if (file_exists($pkg_json)) {
+				file_put_contents($hash_file, md5_file($pkg_json)); // phpcs:ignore
+			}
 			wp_send_json_success([
 				'message' => 'Dependencies installed successfully.',
-				'output' => $output_str
+				'output'  => $output_str,
 			]);
 		} else {
 			wp_send_json_error([
-				'message' => 'npm install failed with exit code ' . $return_var . '. Ensure Node.js and npm are installed on the server.',
-				'output' => $output_str,
-				'node_path_detected' => $node_dir
+				'message'            => 'npm install failed with exit code ' . $return_var . '. Ensure Node.js and npm are installed on the server.',
+				'output'             => $output_str,
+				'node_path_detected' => $node_dir,
 			]);
 		}
 	}

@@ -88,9 +88,50 @@ const FIELD_TYPES = [{
 }, // Complex, placeholder added
 ];
 
-// --- NEW CODE ADDED HERE (Utility Function) ---
-const slugifyKey = (value) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+// --- Utility Functions ---
+const slugifyKey   = (value) => value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 const slugifyLabel = (value) => value.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ');
+
+// Inline SVG placeholder used for image fields in the live preview.
+const PREVIEW_PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%23f1f5f9'/%3E%3Cg fill='%2394a3b8'%3E%3Crect x='160' y='100' width='80' height='60' rx='4'/%3E%3Ccircle cx='185' cy='120' r='10'/%3E%3Cpolygon points='160,160 200,120 240,160'/%3E%3C/g%3E%3Ctext x='50%25' y='85%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-size='13' font-family='sans-serif'%3EImage Placeholder%3C/text%3E%3C/svg%3E";
+
+/**
+ * Processes the raw Mustache template for safe display in the admin live preview.
+ * - Replaces image/file src attributes with the SVG placeholder.
+ * - Replaces remaining {{key}} tags with a readable "[Field Label]" badge.
+ */
+const processTemplateForPreview = (htmlTemplate, fieldList) => {
+    if (!htmlTemplate) return htmlTemplate;
+    let processed = htmlTemplate;
+
+    fieldList.forEach(field => {
+        const escapedKey = field.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        if (field.type === 'image' || field.type === 'file') {
+            // Replace src="{{key}}" (and the _alt variant) with the placeholder
+            processed = processed.replace(
+                new RegExp('src=["\']\\{\\{\\s*' + escapedKey + '\\s*\\}\\}["\']', 'gi'),
+                'src="' + PREVIEW_PLACEHOLDER_SVG + '" style="max-width:100%;display:block;"'
+            );
+            processed = processed.replace(new RegExp('\\{\\{\\s*' + escapedKey + '_alt\\s*\\}\\}', 'g'), field.label + ' alt');
+        }
+
+        if (field.type === 'repeater') {
+            // Collapse repeater loop syntax so the preview doesn't show raw Mustache
+            processed = processed
+                .replace(new RegExp('\\{\\{#(?:each\\s+)?' + escapedKey + '\\}\\}', 'g'), '<!-- repeater: ' + field.label + ' (loop start) -->')
+                .replace(new RegExp('\\{\\{/(?:' + escapedKey + '|each)\\}\\}', 'g'), '<!-- repeater: ' + field.label + ' (loop end) -->');
+        }
+
+        // Replace any remaining {{key}} tokens with a styled badge
+        processed = processed.replace(
+            new RegExp('\\{\\{\\s*' + escapedKey + '\\s*\\}\\}', 'g'),
+            '<span style="background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:3px;font-size:11px;font-family:monospace;">' + (field.label || field.key) + '</span>'
+        );
+    });
+
+    return processed;
+};
 
 // --- 1. The Main Application Component ---
 // --- 1. The Main Application Component ---
@@ -439,7 +480,7 @@ const ComponentEditorApp = ({
         // Function to render the settings for an individual sub-field
         const renderSubFieldSettings = (subField, subIndex) => {
             return createElement(
-                'div', // Wrap PanelBody in a div to handle drag events properly
+                'div',
                 {
                     key: subIndex,
                     draggable: true,
@@ -448,15 +489,22 @@ const ComponentEditorApp = ({
                     onDragEnter: (e) => handleSubDragEnter(e, subIndex),
                     onDrop: (e) => handleSubDrop(e),
                     style: {
-                        marginTop: '10px',
-                        opacity: draggedSubIndex === subIndex ? 0.5 : 1,
-                        transition: 'opacity 0.2s',
-                        cursor: 'grab'
+                        marginTop: '6px',
+                        opacity: draggedSubIndex === subIndex ? 0.4 : 1,
+                        transition: 'opacity 0.15s, box-shadow 0.15s',
+                        borderLeft: '3px solid #007cba',
+                        borderRadius: '0 4px 4px 0',
+                        background: draggedSubIndex === subIndex ? '#f0f6ff' : '#fafafa',
+                        boxShadow: draggedSubIndex === subIndex ? '0 2px 8px rgba(0,124,186,0.15)' : 'none',
                     }
                 },
                 createElement(
                     PanelBody, {
-                    title: `${subField.label} (${subField.type})`,
+                    title: createElement('span', null,
+                        createElement('span', { style: { cursor: 'grab', marginRight: '6px', color: '#b0bec5', fontSize: '14px' } }, '⠿'),
+                        `${subField.label}`,
+                        createElement('span', { style: { marginLeft: '6px', color: '#9e9e9e', fontWeight: 'normal', fontSize: '11px' } }, `(${subField.type})`)
+                    ),
                     initialOpen: false,
                     className: 'repeater-sub-field-settings'
                 },
@@ -657,22 +705,35 @@ const ComponentEditorApp = ({
                     'div', {
                     style: {
                         width: '20%',
-                        borderRight: '1px solid #ccc',
+                        borderRight: '1px solid #ddd',
                         paddingRight: '20px'
                     }
                 },
-                    createElement('h3', null, 'Add Fields'),
-                    FIELD_TYPES.map(type =>
-                        createElement(Button, {
+                    createElement('h3', { style: { marginTop: 0, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#666' } }, 'Inspector Controls'),
+                    createElement('p', { style: { fontSize: '11px', color: '#999', margin: '0 0 8px' } }, 'Added to the Sidebar'),
+                    ['text', 'number', 'range', 'url', 'color', 'date', 'datetime', 'time', 'icon', 'relational'].map(val => {
+                        const t = FIELD_TYPES.find(f => f.value === val);
+                        if (!t) return null;
+                        return createElement(Button, {
+                            key: t.value,
                             isSecondary: true,
-                            style: {
-                                display: 'block',
-                                width: '100%',
-                                marginBottom: '10px'
-                            },
-                            onClick: () => addField(type.value)
-                        }, type.label)
-                    )
+                            style: { display: 'block', width: '100%', marginBottom: '6px', textAlign: 'left' },
+                            onClick: () => addField(t.value)
+                        }, t.label);
+                    }),
+                    createElement('hr', { style: { margin: '12px 0', borderColor: '#eee' } }),
+                    createElement('h3', { style: { fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#666' } }, 'Content / Media'),
+                    createElement('p', { style: { fontSize: '11px', color: '#999', margin: '0 0 8px' } }, 'Also in Sidebar'),
+                    ['textarea', 'contentEditor', 'image', 'file', 'gallery', 'repeater'].map(val => {
+                        const t = FIELD_TYPES.find(f => f.value === val);
+                        if (!t) return null;
+                        return createElement(Button, {
+                            key: t.value,
+                            isSecondary: true,
+                            style: { display: 'block', width: '100%', marginBottom: '6px', textAlign: 'left' },
+                            onClick: () => addField(t.value)
+                        }, t.label);
+                    })
                 ),
                 // --- Middle: Field List ---
                 createElement(
@@ -681,16 +742,24 @@ const ComponentEditorApp = ({
                         width: '40%'
                     }
                 },
-                    createElement('h3', null, 'Block Fields'),
-                    fields.length === 0 && createElement('p', {
+                    createElement('h3', { style: { marginTop: 0 } }, `Block Fields (${fields.length})`),
+                    fields.length === 0 && createElement('div', {
                         style: {
                             fontStyle: 'italic',
-                            color: '#777'
+                            color: '#999',
+                            padding: '20px',
+                            textAlign: 'center',
+                            border: '2px dashed #e0e0e0',
+                            borderRadius: '6px',
+                            background: '#fafafa'
                         }
-                    }, 'No fields added. Click a field type on the left to begin.'),
+                    }, 'No fields yet. Click a field type on the left to begin.'),
 
-                    fields.map((field, index) =>
-                        createElement('div', {
+                    fields.map((field, index) => {
+                        const isSelected = selectedField === field;
+                        const isDragging = draggedIndex === index;
+                        const hasError   = !!invalidFields[index];
+                        return createElement('div', {
                             key: index,
                             draggable: true,
                             onDragStart: (e) => handleDragStart(e, index),
@@ -698,54 +767,36 @@ const ComponentEditorApp = ({
                             onDragEnter: (e) => handleDragEnter(e, index),
                             onDrop: (e) => handleDrop(e),
                             style: {
-                                padding: '10px',
-                                marginBottom: '8px',
-                                border: '1px solid #ddd',
-                                backgroundColor: selectedField === field ? '#eaf4ff' : (draggedIndex === index ? '#f0f0f0' : '#fff'),
-                                opacity: draggedIndex === index ? 0.5 : 1,
+                                padding: '8px 12px',
+                                marginBottom: '4px',
+                                border: '1px solid ' + (hasError ? '#f2c7c7' : (isSelected ? '#007cba' : '#e0e0e0')),
+                                borderLeft: '4px solid ' + (hasError ? '#d94f4f' : (isSelected ? '#007cba' : '#c8c8c8')),
+                                borderRadius: '3px',
+                                backgroundColor: isDragging ? '#f0f0f0' : (isSelected ? '#f0f7ff' : '#fff'),
+                                opacity: isDragging ? 0.45 : 1,
                                 cursor: 'grab',
                                 display: 'flex',
                                 justifyContent: 'space-between',
-                                alignItems: 'center', // Center vertically
-                                transition: 'all 0.2s',
-                                borderLeft: selectedField === field ? '4px solid #007cba' : '1px solid #ddd'
+                                alignItems: 'center',
+                                transition: 'border-color 0.15s, background-color 0.15s',
+                                boxShadow: isSelected ? '0 1px 4px rgba(0,124,186,0.12)' : 'none',
                             },
                             onClick: () => setSelectedField(field)
                         },
                             createElement('div', {
-                                style: {
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px'
-                                }
+                                style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }
                             },
-                                createElement('span', {
-                                    style: {
-                                        cursor: 'grab',
-                                        color: '#ccc',
-                                        fontSize: '18px'
-                                    }
-                                }, '⋮⋮'),
-                                createElement('span', {
-                                    style: {
-                                        fontWeight: '500'
-                                    }
-                                }, field.label),
-                                createElement('span', {
-                                    style: {
-                                        color: '#666',
-                                        fontSize: '0.9em'
-                                    }
-                                }, `(${field.type})`)
+                                createElement('span', { style: { cursor: 'grab', color: '#b0bec5', fontSize: '16px', flexShrink: 0 } }, '⠿'),
+                                createElement('div', { style: { minWidth: 0 } },
+                                    createElement('div', { style: { fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } }, field.label),
+                                    createElement('div', { style: { fontSize: '11px', color: '#9e9e9e', marginTop: '1px' } }, field.key + ' · ' + field.type)
+                                )
                             ),
                             createElement('span', {
-                                style: {
-                                    color: '#007cba',
-                                    fontSize: '20px'
-                                }
-                            }, '›') // Arrow indicating edit
-                        )
-                    )
+                                style: { color: isSelected ? '#007cba' : '#c0c0c0', fontSize: '18px', flexShrink: 0, marginLeft: '8px' }
+                            }, '›')
+                        );
+                    })
                 ),
                 // --- Right: Settings ---
                 createElement(
@@ -971,12 +1022,16 @@ const ComponentEditorApp = ({
                         overflow: 'hidden'
                     }
                 },
-                    // Inject CSS
+                    // Inject CSS (scoped to preview wrapper class)
                     createElement('style', null, css ? css.replace(/\.gk-block-wrapper/g, '.gutenkit-live-preview-wrapper') : ''),
-                    // Inject HTML inside a wrapper
+                    // Inject processed HTML — image placeholders shown, Mustache tags replaced with badges
                     createElement('div', {
                         className: 'gutenkit-live-preview-wrapper',
-                        dangerouslySetInnerHTML: { __html: template || '<p style="color:#aaa;text-align:center;font-style:italic;margin-top:80px;">Preview will appear here...</p>' }
+                        dangerouslySetInnerHTML: {
+                            __html: template
+                                ? processTemplateForPreview(template, fields)
+                                : '<p style="color:#aaa;text-align:center;font-style:italic;margin-top:80px;">Preview will appear here...</p>'
+                        }
                     })
                 )
             ),
