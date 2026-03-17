@@ -1,20 +1,19 @@
 // blocks/my-custom-block/edit.js (This is the template the script overwrites)
+import { useRef, useEffect } from '@wordpress/element';
+
 // This line handles all core block editing components (RichText, MediaUpload, etc.)
-import { 
-    useBlockProps, 
-    RichText, 
-    InspectorControls 
-    // __INJECT_BLOCK_EDITOR_IMPORTS__
-} from '@wordpress/block-editor'; 
+import { useBlockProps, RichText, InspectorControls } from '@wordpress/block-editor';
 
 // This line handles all standard UI components (TextControl, Button, PanelBody, etc.)
-import { 
-    PanelBody 
-    // __INJECT_COMPONENTS_IMPORTS__
-} from '@wordpress/components';
+import { PanelBody } from '@wordpress/components';
+
+// __INJECT_SCRIPT_IMPORTS__
 
 const Edit = ( { attributes, setAttributes } ) => {
 	const blockProps = useBlockProps();
+	const canvasRef = useRef( null );
+
+	// __INJECT_EDITOR_EFFECTS__
 
 	return (
         <div { ...blockProps }>
@@ -24,7 +23,7 @@ const Edit = ( { attributes, setAttributes } ) => {
             </InspectorControls>
 
             {/* 2. CANVAS: Real-time HTML preview goes here */}
-            <div className="bf-block-canvas-preview">
+            <div className="bf-block-canvas-preview" ref={ canvasRef }>
                 // __INJECT_CANVAS_PREVIEW__
             </div>
 

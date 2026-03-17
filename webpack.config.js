@@ -11,13 +11,19 @@ const BLOCKS_BUILD_DIR = path.resolve(__dirname, 'build');
 // Using 'admin' as the output folder, as defined in your block-factory.php
 const ADMIN_BUILD_DIR = path.resolve(__dirname, 'admin/js');
 
-// --- 2. Dynamically find all block entries ---
+// --- 2. Dynamically find all block entries (editor + optional frontend view) ---
 const blockEntries = {};
-const files = glob.sync(`${BLOCKS_SRC_DIR.replace(/\\/g, '/')}/*/index.js`);
 
-files.forEach(file => {
+// Editor scripts — every block has one
+glob.sync(`${BLOCKS_SRC_DIR.replace(/\\/g, '/')}/*/index.js`).forEach(file => {
     const blockSlug = path.basename(path.dirname(file));
     blockEntries[`${blockSlug}/index`] = file;
+});
+
+// Frontend view scripts — only blocks that declare a view.js
+glob.sync(`${BLOCKS_SRC_DIR.replace(/\\/g, '/')}/*/view.js`).forEach(file => {
+    const blockSlug = path.basename(path.dirname(file));
+    blockEntries[`${blockSlug}/view`] = file;
 });
 
 

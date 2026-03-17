@@ -52,12 +52,49 @@ class GutenKit_Generator
 			wp_die('Failed to create block directory. Check permissions.');
 		}
 
+		// Build scripts config from form selection
+		$script_type     = isset($_POST['block_script_type']) ? sanitize_key($_POST['block_script_type']) : '';
+		$scripts_config  = null;
+		$allowed_types   = array( 'slider', 'accordion', 'ajax', 'custom' );
+
+		if ( $script_type && in_array( $script_type, $allowed_types, true ) ) {
+			$selector = sanitize_text_field( isset( $_POST['block_script_selector'] ) ? $_POST['block_script_selector'] : '' );
+			if ( empty( $selector ) ) {
+				$selector = '.gk-block-' . $block_slug;
+			}
+
+			$scripts_config = array( 'type' => $script_type, 'selector' => $selector );
+
+			if ( $script_type === 'slider' ) {
+				$scripts_config['options'] = array(
+					'loop'  => ! empty( $_POST['block_script_loop'] ),
+					'align' => sanitize_key( isset( $_POST['block_script_align'] ) ? $_POST['block_script_align'] : 'start' ),
+				);
+			} elseif ( $script_type === 'accordion' ) {
+				$scripts_config['options'] = array(
+					'single' => ! empty( $_POST['block_script_accordion_single'] ),
+				);
+			} elseif ( $script_type === 'ajax' ) {
+				$scripts_config['action'] = sanitize_text_field( isset( $_POST['block_script_ajax_action'] ) ? $_POST['block_script_ajax_action'] : '' );
+			} elseif ( $script_type === 'custom' ) {
+				// Raw code — not sanitized beyond stripping null bytes
+				$raw_code = isset( $_POST['block_script_custom_code'] ) ? str_replace( "\0", '', $_POST['block_script_custom_code'] ) : '';
+				$scripts_config['code'] = $raw_code;
+			}
+		}
+
+		// Encode scripts block for injection into config.json template
+		$scripts_json_fragment = $scripts_config
+			? ",\n    \"scripts\": " . wp_json_encode( $scripts_config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES )
+			: '';
+
 		$placeholders = array(
 			'__COMPONENT_NAME_PASCAL__' => str_replace(' ', '', ucwords(str_replace('-', ' ', $block_slug))),
 			'__COMPONENT_NAME_TITLE__' => $component_name,
 			'__COMPONENT_SLUG__' => $block_slug,
 			'__COMPONENT_NAMESPACE__' => $block_namespace,
 			'__COMPONENT_ICON__' => $component_icon ? $component_icon : 'editor-code',
+			'__SCRIPTS_CONFIG__' => $scripts_json_fragment,
 		);
 
 		$templates = array(
@@ -127,7 +164,18 @@ class GutenKit_Generator
 		}
 
 		$block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
-		$fs        = $this->get_filesystem();
+
+		// Preserve keys not managed by the editor app (e.g. 'scripts') by merging
+		// with the existing config.json. Editor-sent keys always win; extra keys survive.
+		$fs          = $this->get_filesystem();
+		$config_path = $block_dir . 'config.json';
+		if ( file_exists( $config_path ) ) {
+			$raw_existing = $fs ? $fs->get_contents( $config_path ) : file_get_contents( $config_path );
+			$existing     = json_decode( $raw_existing, true );
+			if ( is_array( $existing ) ) {
+				$config_data = array_merge( $existing, $config_data );
+			}
+		}
 
 		// Selective rebuild: compare incoming config hash to last-saved hash
 		$new_hash    = md5($config_data_json);
@@ -141,7 +189,6 @@ class GutenKit_Generator
 
 		// Write config.json via WP_Filesystem
 		$config_json   = wp_json_encode($config_data, JSON_PRETTY_PRINT);
-		$config_path   = $block_dir . 'config.json';
 		$write_success = $fs
 			? $fs->put_contents($config_path, $config_json, FS_CHMOD_FILE)
 			: (file_put_contents($config_path, $config_json) !== false);
@@ -165,11 +212,12 @@ class GutenKit_Generator
 				}
 
 				if (isset($config_data['css'])) {
-					$style_path = $block_dir . 'style.scss';
+					$style_path  = $block_dir . 'style.scss';
+					$css_content = $this->inject_script_base_css( $config_data['css'], $config_data );
 					if ($fs) {
-						$fs->put_contents($style_path, $config_data['css'], FS_CHMOD_FILE);
+						$fs->put_contents($style_path, $css_content, FS_CHMOD_FILE);
 					} else {
-						file_put_contents($style_path, $config_data['css']);
+						file_put_contents($style_path, $css_content);
 					}
 				}
 			} catch (Throwable $e) {
@@ -418,12 +466,19 @@ class GutenKit_Generator
 			}
 		}
 
+		// Script injection
+		$scripts        = isset( $config_data['scripts'] ) ? $config_data['scripts'] : null;
+		$script_import  = $this->get_script_import( $scripts );
+		$editor_effect  = $this->generate_editor_effect( $scripts );
+
 		$replacements = [
 			'{{BLOCK_SLUG}}' => $block_slug,
 			'// __INJECT_BLOCK_EDITOR_IMPORTS__' => !empty($extra_imports_editor) ? ', ' . implode(', ', $extra_imports_editor) : '',
 			'// __INJECT_COMPONENTS_IMPORTS__' => !empty($extra_imports_components) ? ', ' . implode(', ', $extra_imports_components) : '',
 			'// __INJECT_UI_CODE__' => $inspector_controls,
 			'// __INJECT_CANVAS_PREVIEW__' => $canvas_preview,
+			'// __INJECT_SCRIPT_IMPORTS__' => $script_import,
+			'// __INJECT_EDITOR_EFFECTS__' => $editor_effect,
 		];
 
 		$final_js = str_replace(array_keys($replacements), array_values($replacements), $template);
@@ -431,6 +486,110 @@ class GutenKit_Generator
 			return $fs->put_contents($edit_js_path, $final_js, FS_CHMOD_FILE) !== false;
 		}
 		return file_put_contents($edit_js_path, $final_js) !== false;
+	}
+
+	const EMBLA_CSS_START = '/* [embla-base:start] */';
+	const EMBLA_CSS_END   = '/* [embla-base:end] */';
+
+	/**
+	 * Prepends (or replaces) required base CSS in a block's style.scss content.
+	 * Uses data-attribute selectors so it works regardless of user class names.
+	 */
+	private function inject_script_base_css( $user_css, $config_data ) {
+		$script_type = isset( $config_data['scripts']['type'] ) ? $config_data['scripts']['type'] : '';
+
+		if ( $script_type === 'slider' ) {
+			$base_css = self::EMBLA_CSS_START . "\n"
+				. "/* Embla Carousel required base styles — do not edit this block */\n"
+				. "[data-embla-viewport] { overflow: hidden; }\n"
+				. "[data-embla-viewport] > * { display: flex; touch-action: pan-y pinch-zoom; }\n"
+				. "[data-embla-viewport] > * > * { flex: 0 0 100%; min-width: 0; }\n"
+				. self::EMBLA_CSS_END . "\n";
+		} else {
+			$base_css = '';
+		}
+
+		// Strip any previously injected base block
+		$start_idx = strpos( $user_css, self::EMBLA_CSS_START );
+		$end_idx   = strpos( $user_css, self::EMBLA_CSS_END );
+		if ( $start_idx !== false && $end_idx !== false ) {
+			$after    = substr( $user_css, $end_idx + strlen( self::EMBLA_CSS_END ) );
+			$user_css = $start_idx > 0 ? substr( $user_css, 0, $start_idx ) : '';
+			$user_css = ltrim( $user_css . $after );
+		}
+
+		return $base_css ? $base_css . "\n" . $user_css : $user_css;
+	}
+
+	/**
+	 * Returns the static import line for the given scripts config (empty string if none needed).
+	 */
+	private function get_script_import( $scripts ) {
+		if ( empty( $scripts['type'] ) ) return '';
+		switch ( $scripts['type'] ) {
+			case 'slider':
+				return "import EmblaCarousel from 'embla-carousel';";
+			default:
+				return '';
+		}
+	}
+
+	/**
+	 * Returns the useEffect body to inject into the Edit component for the Gutenberg canvas preview.
+	 * Uses data-embla-* attributes — class names are irrelevant.
+	 */
+	private function generate_editor_effect( $scripts ) {
+		if ( empty( $scripts['type'] ) ) return '';
+
+		$opts = isset( $scripts['options'] ) ? $scripts['options'] : array();
+
+		switch ( $scripts['type'] ) {
+			case 'slider': {
+				$loop  = ! empty( $opts['loop'] ) ? 'true' : 'false';
+				$align = ! empty( $opts['align'] ) ? esc_js( $opts['align'] ) : 'start';
+				return "
+	useEffect( () => {
+		if ( ! canvasRef.current ) return;
+		const viewport = canvasRef.current.querySelector( '[data-embla-viewport]' );
+		if ( ! viewport ) return;
+
+		const embla = EmblaCarousel( viewport, { loop: {$loop}, align: '{$align}' } );
+
+		const prevBtn = canvasRef.current.querySelector( '[data-embla-prev]' );
+		const nextBtn = canvasRef.current.querySelector( '[data-embla-next]' );
+		prevBtn?.addEventListener( 'click', () => embla.scrollPrev() );
+		nextBtn?.addEventListener( 'click', () => embla.scrollNext() );
+
+		const dots = Array.from( canvasRef.current.querySelectorAll( '[data-embla-dots] [data-embla-dot]' ) );
+		const syncDots = () => {
+			const active = embla.selectedScrollSnap();
+			dots.forEach( ( dot, i ) => dot.classList.toggle( 'is-active', i === active ) );
+		};
+		dots.forEach( ( dot, i ) => dot.addEventListener( 'click', () => embla.scrollTo( i ) ) );
+		embla.on( 'select', syncDots );
+		syncDots();
+
+		return () => embla.destroy();
+	}, [ attributes ] );";
+			}
+
+			case 'accordion':
+				return "
+	useEffect( () => {
+		if ( ! canvasRef.current ) return;
+		canvasRef.current.querySelectorAll( '[class*=\"accordion-trigger\"], [class*=\"accordion__header\"]' ).forEach( ( btn ) => {
+			btn.addEventListener( 'click', () => {
+				const panel = btn.nextElementSibling;
+				const isOpen = btn.getAttribute( 'aria-expanded' ) === 'true';
+				btn.setAttribute( 'aria-expanded', String( ! isOpen ) );
+				if ( panel ) panel.style.maxHeight = isOpen ? '0' : panel.scrollHeight + 'px';
+			} );
+		} );
+	}, [ attributes ] );";
+
+			default:
+				return '';
+		}
 	}
 
 	private function generate_inspector_controls($fields)
