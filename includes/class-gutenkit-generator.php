@@ -1247,6 +1247,9 @@ class GutenKit_Generator
 				// Handle Alt: {{key_alt}}
 				$replacement_alt = "\${attributes.$key?.alt || attributes.$key?.filename || ''}";
 				$js_safe_template = preg_replace('/\{\{\s*' . preg_quote($key . '_alt', '/') . '\s*\}\}/', $replacement_alt, $js_safe_template);
+			} elseif ( $type === 'button' ) {
+				// Renders a live anchor tag in the canvas preview
+				$replacement = "<a href=\"\${attributes.$key?.url || '#'}\" class=\"gk-btn\">\${attributes.$key?.text || 'Click Here'}</a>";
 			} else {
 				$replacement = "\${attributes.$key || ''}";
 			}
@@ -1425,6 +1428,13 @@ class GutenKit_Generator
 					break;
 				case 'relational':
 					$php = "<?php echo esc_html(\$attributes['$key'] ?? ''); ?>";
+					break;
+				case 'button':
+					// Renders the full anchor tag so {{key}} expands to a clickable button
+					$php = "<?php if ( ! empty( \$attributes['$key']['url'] ) ): ?>"
+						. "<a href=\"<?php echo esc_url( \$attributes['$key']['url'] ); ?>\" class=\"gk-btn\">"
+						. "<?php echo esc_html( \$attributes['$key']['text'] ?? 'Click Here' ); ?>"
+						. "</a><?php endif; ?>";
 					break;
 				default:
 					// Text, Textarea, ContentEditor (HTML)

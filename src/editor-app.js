@@ -86,6 +86,10 @@ const FIELD_TYPES = [{
     label: 'Relational (Post Select)',
     value: 'relational'
 }, // Complex, placeholder added
+{
+    label: 'Button (Link)',
+    value: 'button'
+},
 ];
 
 // --- Utility Functions ---
@@ -114,6 +118,14 @@ const processTemplateForPreview = (htmlTemplate, fieldList) => {
                 'src="' + PREVIEW_PLACEHOLDER_SVG + '" style="max-width:100%;display:block;"'
             );
             processed = processed.replace(new RegExp('\\{\\{\\s*' + escapedKey + '_alt\\s*\\}\\}', 'g'), field.label + ' alt');
+        }
+
+        if (field.type === 'button') {
+            // Replace {{key}} with a visible anchor badge in preview
+            processed = processed.replace(
+                new RegExp('\\{\\{\\s*' + escapedKey + '\\s*\\}\\}', 'g'),
+                '<a href="#" class="bf-preview-btn">' + (field.label || 'Button') + '</a>'
+            );
         }
 
         if (field.type === 'repeater') {
@@ -627,11 +639,43 @@ const ComponentEditorApp = ({
                     help: "Must be unique, lowercase, and contain only letters, numbers, and underscores.",
                     onChange: val => updateField(index, 'key', val)
                 }),
-                createElement(TextControl, {
+                createElement(SelectControl, {
+                    label: "Field Type",
+                    value: selectedField.type,
+                    options: FIELD_TYPES.map(t => ({ label: t.label, value: t.value })),
+                    onChange: val => {
+                        // Reset default to a sensible empty value for the new type
+                        const objTypes   = ['image', 'file'];
+                        const arrayTypes = ['gallery', 'repeater'];
+                        let newDefault = '';
+                        if (val === 'button')            newDefault = { text: '', url: '' };
+                        else if (objTypes.includes(val)) newDefault = null;
+                        else if (arrayTypes.includes(val)) newDefault = [];
+                        const newFields = fields.map((f, i) => i === index ? { ...f, type: val, default: newDefault } : f);
+                        setFields(newFields);
+                        setSelectedField(newFields[index]);
+                    }
+                }),
+                // Default value — hide for object/array types that don't use a plain string default
+                !['image', 'file', 'gallery', 'repeater', 'button'].includes(selectedField.type) && createElement(TextControl, {
                     label: "Default Value (Optional)",
-                    value: selectedField.default,
+                    value: selectedField.default || '',
                     onChange: val => updateField(index, 'default', val)
                 }),
+                // Button type: show text + url defaults inline
+                selectedField.type === 'button' && createElement('div', { className: 'bf-button-defaults' },
+                    createElement('p', { className: 'bf-button-defaults__label' }, 'Default Button Values'),
+                    createElement(TextControl, {
+                        label: "Default Text",
+                        value: (selectedField.default && selectedField.default.text) || '',
+                        onChange: val => updateField(index, 'default', { ...(selectedField.default || {}), text: val })
+                    }),
+                    createElement(TextControl, {
+                        label: "Default URL",
+                        value: (selectedField.default && selectedField.default.url) || '',
+                        onChange: val => updateField(index, 'default', { ...(selectedField.default || {}), url: val })
+                    })
+                ),
                 invalidFields[index] && createElement('div', {
                     style: {
                         color: '#d94f4f',
@@ -711,7 +755,7 @@ const ComponentEditorApp = ({
                 },
                     createElement('h3', { style: { marginTop: 0, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#666' } }, 'Inspector Controls'),
                     createElement('p', { style: { fontSize: '11px', color: '#999', margin: '0 0 8px' } }, 'Added to the Sidebar'),
-                    ['text', 'number', 'range', 'url', 'color', 'date', 'datetime', 'time', 'icon', 'relational'].map(val => {
+                    ['text', 'number', 'range', 'url', 'color', 'date', 'datetime', 'time', 'icon', 'relational', 'button'].map(val => {
                         const t = FIELD_TYPES.find(f => f.value === val);
                         if (!t) return null;
                         return createElement(Button, {

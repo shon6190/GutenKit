@@ -697,3 +697,40 @@
     color: var(--gk-danger-hover) !important;
     text-decoration: underline !important;
 }
+/* Button field preview — editor-app.js template preview */
+.bf-preview-btn {
+    display: inline-block;
+    padding: 6px 14px;
+    background: var(--gk-primary);
+    color: #fff;
+    border-radius: var(--gk-radius);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    pointer-events: none;
+}
+
+/* Button field — default value sub-section in renderSettings */
+.bf-button-defaults {
+    margin-bottom: 12px;
+}
+.bf-button-defaults__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gk-text-muted);
+    margin: 0 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Button field — live preview link in sidebar Inspector Controls */
+.gk-btn-preview {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 6px 14px;
+    background: var(--wp-admin-theme-color, #3b82f6);
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 13px;
+}

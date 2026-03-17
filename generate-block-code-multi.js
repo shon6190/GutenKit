@@ -404,9 +404,11 @@ function generateBlock(blockPath) {
         });
 
         let newAttributesJsonString = '';
+        let newAttributesJsonStringNoComma = '';
         if (Object.keys(injectionAttributes).length > 0) {
             const attrString = JSON.stringify(injectionAttributes, null, 4).slice(1, -1).trim();
-            newAttributesJsonString = ',\n' + attrString;
+            newAttributesJsonString      = ',\n' + attrString;  // used when hook follows a preceding attribute
+            newAttributesJsonStringNoComma = '\n    ' + attrString; // used when hook is the only attribute
         }
 
         let finalBlockJsonContent;
@@ -416,6 +418,9 @@ function generateBlock(blockPath) {
             finalBlockJsonContent = blockJsonContent.replace(ATTRIBUTES_HOOK, newAttributesJsonString);
         }
 
+        // Fix stray leading comma inside "attributes": { , ... } that appears when the
+        // hook was the only entry (FINAL_HOOK_REGEX can match a comma from an outer property)
+        finalBlockJsonContent = finalBlockJsonContent.replace(/"attributes"\s*:\s*\{\s*,/g, '"attributes": {');
         finalBlockJsonContent = finalBlockJsonContent.replace(/,\s*,/g, ',').replace(/},\s*,/g, '},');
 
         fs.writeFileSync(blockJsonPath, finalBlockJsonContent, 'utf8');
