@@ -14,6 +14,7 @@
             "__INJECT_ATTRIBUTES_HOOK__": {}
         },
         "editorScript": "file:./index.js",
+        "viewScript": "file:./view.js",
         "style": "file:./style-index.css",
         "editorStyle": "file:./editor.css"
     }

@@ -13,5 +13,8 @@
     "@wordpress/scripts": "^26.0.0",
     "copy-webpack-plugin": "^13.0.1",
     "glob": "^8.1.0"
+  },
+  "dependencies": {
+    "embla-carousel": "^8.6.0"
   }
 }
