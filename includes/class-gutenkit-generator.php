@@ -318,7 +318,8 @@ class GutenKit_Generator
 		$dir = BLOCK_FACTORY_PATH;
 
 		// Detect Node environment
-		$node_env = $this->detect_node_environment();
+		$node_environment = new GutenKit_NodeEnvironment();
+		$node_env = $node_environment->detect();
 		$npm_cmd = $node_env['npm_cmd'];
 		$node_dir = $node_env['node_dir'];
 
@@ -1647,93 +1648,6 @@ class GutenKit_Generator
 	}
 
 	/**
-	 * Detect Node/NPM Environment
-	 * 
-	 * Tries to find the path to npm and the directory containing node.
-	 * 
-	 * @return array {
-	 *     @type string $npm_cmd  The command to run npm (e.g. "npm", "/usr/bin/npm", "C:\...\npm.cmd")
-	 *     @type string $node_dir The directory containing the node executable (to add to PATH)
-	 * }
-	 */
-	private function detect_node_environment()
-	{
-		$is_win = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN');
-
-		// Default values
-		$npm_cmd = 'npm';
-		$node_dir = '';
-
-		// 1. Check for custom constant in wp-config.php
-		if (defined('WP_BLOCK_FACTORY_NODE_PATH')) {
-			$custom_path = dirname(WP_BLOCK_FACTORY_NODE_PATH); // If defined as /path/to/node/npm
-			// Assume the user might point to the directory OR the executable.
-			// Let's assume directory for simplicity or handle both.
-
-			// If constant points to directory (e.g. /usr/local/bin)
-			if (is_dir(WP_BLOCK_FACTORY_NODE_PATH)) {
-				$node_dir = WP_BLOCK_FACTORY_NODE_PATH;
-				$npm_cmd = $is_win ? '"' . $node_dir . '\npm.cmd"' : '"' . $node_dir . '/npm"';
-			}
-			// If constant points to executable (e.g. /usr/local/bin/node)
-			elseif (is_file(WP_BLOCK_FACTORY_NODE_PATH)) {
-				$node_dir = dirname(WP_BLOCK_FACTORY_NODE_PATH);
-				$npm_cmd = $is_win ? '"' . $node_dir . '\npm.cmd"' : '"' . $node_dir . '/npm"';
-			}
-
-			return ['npm_cmd' => $npm_cmd, 'node_dir' => $node_dir];
-		}
-
-		// 2. Automated Detection
-		if ($is_win) {
-			// Windows Detection
-
-			// Try 'where' command first
-			$output = [];
-			exec('where npm', $output, $ret);
-			if ($ret === 0 && !empty($output)) {
-				$npm_path = $output[0]; // First match
-				// Check if it's a batch/cmd file
-				if (preg_match('/\.cmd$/i', $npm_path) || preg_match('/\.bat$/i', $npm_path)) {
-					$npm_cmd = '"' . $npm_path . '"';
-					$node_dir = dirname($npm_path);
-				}
-				// Sometimes 'where npm' returns the shim (AppData\Roaming\npm\npm), finding node might be different.
-				// Usually node.exe is in the same dir as npm.cmd in Program Files.
-			}
-
-			// Fallback to common paths if 'where' failed or we want to be sure
-			if (empty($node_dir)) {
-				$possible_paths = [
-					'C:\\Program Files\\nodejs\\npm.cmd',
-					'C:\\Program Files (x86)\\nodejs\\npm.cmd',
-					getenv('APPDATA') . '\\npm\\npm.cmd',
-				];
-				foreach ($possible_paths as $path) {
-					if (file_exists($path)) {
-						$npm_cmd = '"' . $path . '"';
-						$node_dir = dirname($path);
-						break;
-					}
-				}
-			}
-		} else {
-			// Linux/Unix Detection
-			$output = [];
-			exec('which npm', $output, $ret);
-			if ($ret === 0 && !empty($output)) {
-				$npm_cmd = trim($output[0]);
-				$node_dir = dirname($npm_cmd);
-			}
-		}
-
-		return [
-			'npm_cmd' => $npm_cmd,
-			'node_dir' => $node_dir,
-		];
-	}
-
-	/**
 	 * Handle Install Dependencies (AJAX)
 	 * Skips execution if node_modules already exists and package.json is unchanged.
 	 */
@@ -1767,7 +1681,8 @@ class GutenKit_Generator
 			]);
 		}
 
-		$node_env = $this->detect_node_environment();
+		$node_environment = new GutenKit_NodeEnvironment();
+		$node_env = $node_environment->detect();
 		$node_dir = $node_env['node_dir'];
 
 		if ($node_dir) {
