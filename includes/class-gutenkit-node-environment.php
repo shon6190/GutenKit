@@ -2,29 +2,30 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class GutenKit_NodeEnvironment {
-    private $node_dir = null;
-    private $npm_cmd = null;
+    private $node_dir = false;
+    private $npm_cmd = false;
     private $detected = false;
 
     public function detect() {
         if ( $this->detected ) {
-            return array(
-                'npm_cmd'  => $this->npm_cmd,
-                'node_dir' => $this->node_dir,
-            );
+            return $this->result();
         }
 
         $this->npm_cmd  = false;
         $this->node_dir = false;
 
-        // 1. Check constant override
-        if ( defined( 'WP_BLOCK_FACTORY_NODE_PATH' ) && is_dir( WP_BLOCK_FACTORY_NODE_PATH ) ) {
-            $this->node_dir = rtrim( WP_BLOCK_FACTORY_NODE_PATH, '/\\' );
-            $npm_bin = $this->node_dir . ( PHP_OS_FAMILY === 'Windows' ? '\\npm.cmd' : '/npm' );
-            if ( file_exists( $npm_bin ) ) {
-                $this->npm_cmd = '"' . $npm_bin . '"';
-                $this->detected = true;
-                return $this->detect();
+        // 1. Check constant override (supports both directory and file path)
+        if ( defined( 'WP_BLOCK_FACTORY_NODE_PATH' ) ) {
+            $const_path = WP_BLOCK_FACTORY_NODE_PATH;
+            $dir = is_dir( $const_path ) ? rtrim( $const_path, '/\\' ) : dirname( $const_path );
+            if ( is_dir( $dir ) ) {
+                $npm_bin = $dir . ( PHP_OS_FAMILY === 'Windows' ? '\\npm.cmd' : '/npm' );
+                if ( file_exists( $npm_bin ) ) {
+                    $this->npm_cmd  = '"' . $npm_bin . '"';
+                    $this->node_dir = $dir;
+                    $this->detected = true;
+                    return $this->result();
+                }
             }
         }
 
@@ -37,7 +38,7 @@ class GutenKit_NodeEnvironment {
             $this->npm_cmd  = '"' . trim( $npm_path ) . '"';
             $this->node_dir = dirname( trim( $npm_path ) );
             $this->detected = true;
-            return $this->detect();
+            return $this->result();
         }
 
         // 3. Fallback paths
@@ -51,12 +52,19 @@ class GutenKit_NodeEnvironment {
                 $this->npm_cmd  = '"' . $npm_bin . '"';
                 $this->node_dir = $dir;
                 $this->detected = true;
-                return $this->detect();
+                return $this->result();
             }
         }
 
         $this->detected = true;
-        return $this->detect();
+        return $this->result();
+    }
+
+    private function result() {
+        return array(
+            'npm_cmd'  => $this->npm_cmd,
+            'node_dir' => $this->node_dir,
+        );
     }
 
     public function get_npm_cmd() {
