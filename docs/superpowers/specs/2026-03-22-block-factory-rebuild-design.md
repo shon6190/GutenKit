@@ -75,29 +75,51 @@ includes/
 ### Class responsibilities
 
 **ConfigManager:**
-- `save($slug, $configData)` — validates JSON, acquires flock(), writes config.json, releases lock
+- `handle_save_structure()` — AJAX handler for `wp_ajax_block_factory_save_structure`. Validates nonce/permissions, delegates to save() + CheatSheet, returns cheat sheet HTML.
+- `save($slug, $configData)` — merges incoming `fields`/`template`/`css` with existing config (preserves `scripts` key), validates JSON, acquires flock(), writes config.json via WP_Filesystem, releases lock
 - `load($slug)` — reads and parses config.json
 - `validate($config)` — checks required fields exist, field types are known
 - `backup($slug)` / `restore($slug)` — timestamped backup before writes
+- `delete_transient_cache()` — invalidates `gutenkit_blocks_cache` transient after config changes
+- Config hash optimization: stores `.config_hash` file, skips write if content unchanged
 
 **BlockCreator:**
-- `create($name, $icon, $scriptType)` — copies templates/*.tpl → blocks/{slug}/, replaces placeholders
-- `delete($slug)` — removes blocks/{slug}/ and build/{slug}/ directories
-- AJAX handlers: `admin_post_block_factory_generate`, `wp_ajax_block_factory_delete_block`
+- `create($name, $icon, $scriptType)` — copies templates/*.tpl → blocks/{slug}/, replaces placeholders, invalidates transient cache
+- `delete($slug)` — removes blocks/{slug}/ and build/{slug}/ directories via `delete_dir_recursive()`, invalidates transient cache
+- Hooks: `admin_post_block_factory_generate` (form POST), `wp_ajax_block_factory_delete_block` (AJAX)
 
 **BlockBuilder:**
-- `build()` — runs `npm run build` via proc_open() with 120s timeout
+- `build()` — runs `npm run build` via proc_open() with 120s timeout, invalidates transient cache
 - `install()` — runs `npm install` via proc_open() with 120s timeout
+- Cross-platform process kill: `taskkill /T /PID` on Windows, `kill -9` on Unix
 - AJAX handlers: `wp_ajax_bf_run_npm_build`, `wp_ajax_bf_install_dependencies`
 
 **CheatSheet:**
 - `generate($fields)` — reads field definitions, returns HTML table of `{{field_key}}` placeholders
+- `write($slug, $fields)` — writes `cheat_sheet.html` file to block directory
 - Covers: simple fields, image/file URL/alt patterns, repeater loop syntax, gallery nested loops
 
 **NodeEnvironment:**
 - `detect()` — cross-platform Node/npm path detection
 - `get_node_path()` / `get_npm_path()` — cached results
 - Supports `WP_BLOCK_FACTORY_NODE_PATH` constant override
+
+**Utility methods (shared):**
+- `log_error($message)` — appends to `gutenkit-debug.log` with timestamps (used by all classes)
+- `delete_dir_recursive($path)` — recursive directory removal via WP_Filesystem (used by BlockCreator)
+
+**Loader wiring (`class-gutenkit-loader.php`):**
+The Loader's `includes()` method requires all new class files. The `init_hooks()` method instantiates them:
+```php
+$node_env = new GutenKit_NodeEnvironment();
+$config_manager = new GutenKit_ConfigManager(); // registers wp_ajax_block_factory_save_structure
+$cheat_sheet = new GutenKit_CheatSheet();
+$config_manager->set_cheat_sheet($cheat_sheet);
+$block_creator = new GutenKit_BlockCreator();    // registers admin_post + wp_ajax hooks
+$block_builder = new GutenKit_BlockBuilder($node_env); // registers wp_ajax hooks
+```
+
+**WP_Filesystem:** All file operations (config save, block creation, deletion, backup) use `WP_Filesystem` for WordPress.org compatibility, matching the current codebase pattern.
 
 ---
 
@@ -140,10 +162,12 @@ src/
 
 ### Key changes
 
-- **jQuery eliminated** — `utils/api.js` uses `wp.apiFetch` or vanilla `fetch`
+- **jQuery eliminated** — `utils/api.js` uses vanilla `fetch` with `admin-ajax.php` (same AJAX endpoints, not REST API migration). Receives `ajaxurl` and nonce from `wp_localize_script` via `window.blockFactoryEditor` global, same as current code.
 - **Inline styles eliminated** — each component has a `.scss` file
 - **Drag-drop shared** — `DragDrop.js` handles both field-level and sub-field-level reordering
 - **State centralized** — `useBlockConfig` hook manages all config state, exposed via props
+- **`assets/js/admin.js` rewritten** — convert from jQuery to vanilla JS. Handles: delete block button, install dependencies button, dashicon picker. Loaded on dashboard page only (not the React editor).
+- **`admin/generator-form.php` updated** — remove any inline jQuery references, use vanilla JS event handlers
 - **No changes to:** `lib/fields.js`, `lib/constants.js`, `lib/php-to-jsx.js`, `webpack.config.js`
 
 ---
@@ -156,8 +180,16 @@ src/
 - Reads `config.template` (Mustache HTML)
 - Processes `{{field}}` → `<?php echo esc_html($attributes['field']); ?>`
 - Processes `{{#each key}}` → `<?php foreach($attributes['key'] as $item): ?>`
-- Handles special patterns: image URL/alt, file URL/filename, gallery nested loop, button conditional
-- Writes `render.php` to block directory
+- Handles special patterns with correct escaping per context:
+  - **Text/number/date/time/icon fields:** `esc_html()` — safe for HTML text content
+  - **URL fields, image/file URLs:** `esc_url()` — safe for href/src attributes
+  - **Image alt, file filename:** `esc_attr()` — safe for HTML attributes
+  - **ContentEditor fields:** `wp_kses_post()` — allows safe HTML subset
+  - **Color fields:** `esc_attr()` — used in style attributes
+  - **Button:** conditional `if(!empty(...))` wrapper, `esc_url()` for href, `esc_html()` for text
+  - **Gallery:** nested `foreach` with `esc_url()` for src, `esc_attr()` for alt
+  - **Repeater:** outer `foreach`, inner fields use same escaping rules as top-level
+- Writes `render.php` to block directory (stays in `blocks/{slug}/`, not `build/`)
 
 **Enhanced: `generateBlock(blockPath)`**
 - Now generates ALL output files: `edit.js`, `render.php`, `view.js`, `block.json`, `attributes.json`, `style.scss`
@@ -168,9 +200,9 @@ src/
 - PHP no longer maps field types — it only reads/writes `config.json`
 - The PHP ↔ JS contract is the `config.json` format (unchanged)
 
-**Template syntax enforcement:**
-- Only `{{#each key}}...{{/each}}` recognized
-- Old `{{#key}}...{{/key}}` patterns emit console warning with block name during build
+**Template syntax enforcement (phased):**
+- During Steps 4–7: both `{{#each key}}` and `{{#key}}` syntaxes are supported, with console deprecation warning for old syntax
+- After Step 8 (template migration): only `{{#each key}}...{{/each}}` recognized, old syntax is a build error
 
 **Field key validation (security):**
 - Before any code generation, validate all field keys against `/^[a-z][a-z0-9_]*$/`
@@ -187,7 +219,7 @@ src/
 
 ### 2. API key encryption
 - **Where:** `class-gutenkit-ai.php`
-- **What:** Encrypt API keys with `wp_salt('auth')` before `update_option()`. Decrypt on retrieval.
+- **What:** Encrypt API keys using `openssl_encrypt` (AES-256-CBC) with `wp_salt('auth')` as key before `update_option()`. Decrypt with `openssl_decrypt` on retrieval. If salts change, keys become unreadable — user re-enters them (acceptable UX since it's rare).
 - **Why:** Prevents casual exposure from database dumps.
 
 ### 3. exec() timeout
@@ -218,10 +250,11 @@ Each step leaves the plugin fully functional. Test after every step.
 - Delete duplicate methods
 
 ### Step 2: Extract ConfigManager + CheatSheet
-- Create `class-gutenkit-config-manager.php` with flock() support
-- Create `class-gutenkit-cheat-sheet.php`
-- `Generator::handle_save_structure()` delegates to ConfigManager + CheatSheet
-- Generator still does file generation (not removed yet — safe transition)
+- Create `class-gutenkit-config-manager.php` — registers `wp_ajax_block_factory_save_structure` hook
+- ConfigManager's `handle_save_structure()` takes over the AJAX endpoint. It: validates nonce/permissions, merges incoming data with existing config (preserving `scripts` key), saves config.json, calls CheatSheet, returns HTML.
+- Create `class-gutenkit-cheat-sheet.php` — generates + writes cheat sheet
+- Generator's `handle_save_structure()` is removed (ConfigManager owns the AJAX action now)
+- Generator still does file generation when called by ConfigManager (transition: ConfigManager calls Generator methods for file regen until Step 4–5 remove them)
 
 ### Step 3: Extract BlockCreator + BlockBuilder
 - Move `handle_create_block()`, `handle_delete_block()` → `BlockCreator`
@@ -232,19 +265,30 @@ Each step leaves the plugin fully functional. Test after every step.
 ### Step 4: Port render.php generation to Node.js
 - Add `generateRenderPhp()` to `generate-block-code-multi.js`
 - Add field key validation (security fix #1)
-- Test: `npm run build` produces identical `render.php` output as PHP did
+- Support both `{{#each key}}` and `{{#key}}` syntax with deprecation warning (backward compat until Step 8)
+- Test: `npm run build` produces identical `render.php` output as PHP did for all existing blocks
 - Remove `generate_render_php()` from Generator
+- **Note:** After this step, render.php is only generated during build, not on save. This is acceptable because the user workflow is always fields → template → build in one session.
 
-### Step 5: Remove remaining PHP generation
+### Step 5: Remove remaining PHP generation + delete Generator
 - Remove `regenerate_edit_js()`, `update_block_json()`, all template helper methods from Generator
-- `handle_save_structure()` now only: save config.json → return cheat sheet
-- Delete `class-gutenkit-generator.php` entirely
+- ConfigManager already owns `handle_save_structure()` (from Step 2) — it stops calling Generator file-gen methods
+- ConfigManager save flow is now: validate → merge → flock → write config.json → return cheat sheet
+- Delete `class-gutenkit-generator.php` entirely — all methods migrated to other classes or Node.js
+- Remove Generator from Loader's `includes()` and `init_hooks()`
 
 ### Step 6: Split editor-app.js
-- Create component files one at a time
-- Order: `utils/api.js` → `hooks/useBlockConfig.js` → `App.js` → step-fields components → step-template components → shared components
-- Replace `jQuery.post` with `utils/api.js`
-- Extract inline styles to SCSS files
+- **Strategy:** Incremental extraction. The old `editor-app.js` remains the working entry point throughout. Components are extracted one at a time and imported back into the shrinking monolith. Webpack builds remain functional at every commit.
+- Order:
+  1. `utils/api.js` — replace all `jQuery.post` calls with vanilla `fetch` wrappers
+  2. `hooks/useBlockConfig.js` — extract state management + API calls
+  3. `components/App.js` — extract wizard step routing shell
+  4. `step-fields/` components — FieldPalette, FieldList, FieldSettings, RepeaterSettings
+  5. `step-template/` components — TemplateEditor, CSSEditor, LivePreview, AIGenerator
+  6. `shared/` — DragDrop, Validation
+- Extract inline styles to SCSS files as each component is extracted
+- Also rewrite `assets/js/admin.js` from jQuery to vanilla JS (dashboard buttons + icon picker)
+- Update `admin/generator-form.php` to remove jQuery references
 
 ### Step 7: Remaining security fixes
 - API key encryption in `GutenKit_AI` (security fix #2)
@@ -266,12 +310,14 @@ Each step leaves the plugin fully functional. Test after every step.
 
 These files are not touched during the rebuild:
 
+- `block-factory.php` — entry point (only change: Loader instantiation stays the same)
 - `lib/fields.js` — field type definitions (already clean)
 - `lib/constants.js` — paths and markers (already clean)
 - `lib/php-to-jsx.js` — PHP→JSX converter (improve later, not blocking)
 - `webpack.config.js` — dual build config (works as-is)
-- `templates/*.tpl` — boilerplate templates (works as-is)
+- `templates/*.tpl` — boilerplate templates including `save.js.tpl`, `editor.scss.tpl` (works as-is)
 - `blocks/*/config.json` — backward compatible, no schema changes
+- `admin/js/editor-app.asset.php` — webpack-generated dependency manifest
 
 ---
 
