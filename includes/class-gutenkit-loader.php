@@ -39,6 +39,8 @@ class GutenKit_Loader
 	{
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-node-environment.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-register.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-cheat-sheet.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-config-manager.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-generator.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-ai.php';
 
@@ -52,8 +54,16 @@ class GutenKit_Loader
 		// Instantiate Registration
 		$registrar = new GutenKit_Register();
 
-		// Instantiate Generator (AJAX handlers)
+		// Instantiate ConfigManager + CheatSheet (owns save-structure endpoint)
+		$cheat_sheet    = new GutenKit_CheatSheet();
+		$config_manager = new GutenKit_ConfigManager();
+		$config_manager->set_cheat_sheet( $cheat_sheet );
+
+		// Instantiate Generator (AJAX handlers — file regeneration)
 		$generator = new GutenKit_Generator();
+
+		// Transition bridge: ConfigManager delegates file regen to Generator
+		$config_manager->set_generator( $generator );
 
 		// Instantiate AI Module
 		$ai = new GutenKit_AI();

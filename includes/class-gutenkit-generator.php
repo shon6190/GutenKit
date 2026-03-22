@@ -18,7 +18,6 @@ class GutenKit_Generator
 		add_action('admin_post_block_factory_generate', array($this, 'handle_create_block'));
 
 		// AJAX Actions
-		add_action('wp_ajax_block_factory_save_structure', array($this, 'handle_save_structure'));
 		add_action('wp_ajax_block_factory_delete_block', array($this, 'handle_delete_block'));
 		add_action('wp_ajax_bf_run_npm_build', array($this, 'handle_run_build'));
 		add_action('wp_ajax_bf_install_dependencies', array($this, 'handle_install_dependencies'));
@@ -138,124 +137,31 @@ class GutenKit_Generator
 	}
 
 	/**
-	 * Handle Config Save (AJAX) — with WP_Filesystem writes and automatic rollback on failure.
+	 * Transition bridge: called by ConfigManager to regenerate block files from config.
+	 * This method will be removed in Task 5 when file generation moves to Node.js.
+	 *
+	 * @param string $slug        Block slug.
+	 * @param array  $config_data Full merged config data.
 	 */
-	public function handle_save_structure()
-	{
-		if (
-			!isset($_POST['nonce']) ||
-			!wp_verify_nonce($_POST['nonce'], 'block_factory_save_structure_action') ||
-			!current_user_can('manage_options')
-		) {
-			wp_send_json_error(array('message' => 'Security check failed.'));
+	public function regenerate_files_from_config( $slug, $config_data ) {
+		$this->update_block_json( $slug, $config_data );
+		$this->regenerate_edit_js( $slug, $config_data );
+
+		if ( isset( $config_data['template'] ) ) {
+			$this->generate_render_php( $slug, $config_data );
 		}
 
-		$block_slug       = sanitize_title($_POST['block_slug']);
-		$config_data_json = isset($_POST['config_data']) ? wp_unslash($_POST['config_data']) : '';
-
-		if (empty($block_slug) || empty($config_data_json)) {
-			wp_send_json_error(array('message' => 'Missing data.'));
-		}
-
-		$config_data = json_decode($config_data_json, true);
-
-		if (is_null($config_data)) {
-			wp_send_json_error(array('message' => 'Invalid JSON.'));
-		}
-
-		$block_dir = BLOCKS_BASE_PATH . $block_slug . '/';
-
-		// Preserve keys not managed by the editor app (e.g. 'scripts') by merging
-		// with the existing config.json. Editor-sent keys always win; extra keys survive.
-		$fs          = $this->get_filesystem();
-		$config_path = $block_dir . 'config.json';
-		if ( file_exists( $config_path ) ) {
-			$raw_existing = $fs ? $fs->get_contents( $config_path ) : file_get_contents( $config_path );
-			$existing     = json_decode( $raw_existing, true );
-			if ( is_array( $existing ) ) {
-				$config_data = array_merge( $existing, $config_data );
-			}
-		}
-
-		// Selective rebuild: compare incoming config hash to last-saved hash
-		$new_hash    = md5($config_data_json);
-		$hash_file   = $block_dir . '.config_hash';
-		$stored_hash = ($fs && $fs->exists($hash_file)) ? trim($fs->get_contents($hash_file)) : '';
-
-		// Backup existing files before any writes so we can roll back if needed
-		$files_to_protect = array('config.json', 'block.json', 'edit.js', 'render.php', 'style.scss');
-		$backup_dir       = $block_dir . '.backup_' . time() . '/';
-		$backup_created   = $this->backup_block_files($block_dir, $backup_dir, $files_to_protect);
-
-		// Write config.json via WP_Filesystem
-		$config_json   = wp_json_encode($config_data, JSON_PRETTY_PRINT);
-		$write_success = $fs
-			? $fs->put_contents($config_path, $config_json, FS_CHMOD_FILE)
-			: (file_put_contents($config_path, $config_json) !== false);
-
-		if (!$write_success) {
-			if ($backup_created) {
-				$this->restore_from_backup($backup_dir, $block_dir, $files_to_protect);
-				$this->cleanup_backup($backup_dir);
-			}
-			wp_send_json_error(array('message' => 'Failed to write config file. Check folder permissions.'));
-		}
-
-		// Regenerate block files only when the config has actually changed
-		if ($new_hash !== $stored_hash) {
-			try {
-				$this->update_block_json($block_slug, $config_data);
-				$this->regenerate_edit_js($block_slug, $config_data);
-
-				if (isset($config_data['template'])) {
-					$this->generate_render_php($block_slug, $config_data);
-				}
-
-				if (isset($config_data['css'])) {
-					$style_path  = $block_dir . 'style.scss';
-					$css_content = $this->inject_script_base_css( $config_data['css'], $config_data );
-					if ($fs) {
-						$fs->put_contents($style_path, $css_content, FS_CHMOD_FILE);
-					} else {
-						file_put_contents($style_path, $css_content);
-					}
-				}
-			} catch (Throwable $e) {
-				// Roll back every file to its pre-save state
-				if ($backup_created) {
-					$this->restore_from_backup($backup_dir, $block_dir, $files_to_protect);
-					$this->cleanup_backup($backup_dir);
-				}
-				$this->log_generator_error($block_slug, 'Save rolled back — ' . $e->getMessage());
-				wp_send_json_error(array(
-					'message' => 'Save failed and was rolled back. Error: ' . $e->getMessage(),
-				));
-			}
-
-			// Persist the new hash so identical future saves skip regeneration
-			if ($fs) {
-				$fs->put_contents($hash_file, $new_hash, FS_CHMOD_FILE);
+		if ( isset( $config_data['css'] ) ) {
+			$block_dir   = BLOCKS_BASE_PATH . $slug . '/';
+			$style_path  = $block_dir . 'style.scss';
+			$css_content = $this->inject_script_base_css( $config_data['css'], $config_data );
+			$fs          = $this->get_filesystem();
+			if ( $fs ) {
+				$fs->put_contents( $style_path, $css_content, FS_CHMOD_FILE );
 			} else {
-				file_put_contents($hash_file, $new_hash);
+				file_put_contents( $style_path, $css_content );
 			}
 		}
-
-		// Clean up the safety backup — all writes succeeded
-		if ($backup_created) {
-			$this->cleanup_backup($backup_dir);
-		}
-
-		$cheat_sheet_html = '';
-		if (isset($config_data['fields'])) {
-			$cheat_sheet_html = $this->generate_data_cheat_sheet($block_slug, $config_data['fields']);
-		}
-
-		$unchanged_note = ($new_hash === $stored_hash) ? ' (files already up to date, skipped regeneration)' : '';
-		wp_send_json_success(array(
-			'message'     => 'Block structure saved!' . $unchanged_note,
-			'next_step'   => 'Run build.',
-			'cheat_sheet' => $cheat_sheet_html,
-		));
 	}
 
 	/**
@@ -1478,73 +1384,8 @@ class GutenKit_Generator
 		}
 	}
 
-	private function generate_data_cheat_sheet($slug, $fields)
-	{
-		$lines = [];
-		$lines[] = "<h3>Field Cheat Sheet</h3>";
-		$lines[] = "<p>Copy these snippets into your <strong>Render Template</strong> or <strong>Canvas Template</strong>.</p>";
-		$lines[] = "<hr>";
-
-		foreach ($fields as $field) {
-			$key = $field['key'];
-			$label = $field['label'];
-			$type = $field['type'];
-
-			$lines[] = "<div style='margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;'>";
-			$lines[] = "<strong>$label ($key) - $type</strong><br>";
-
-			if ($type === 'repeater') {
-				$lines[] = "<em>Loop:</em><br>";
-				$lines[] = "<code>{{#each $key}}</code><br>";
-
-				if (isset($field['subFields'])) {
-					foreach ($field['subFields'] as $sub) {
-						$sKey = $sub['key'];
-						$sType = $sub['type'];
-
-						if ($sType === 'gallery') {
-							$lines[] = "&nbsp;&nbsp; <em>Gallery Loop:</em><br>";
-							$lines[] = "&nbsp;&nbsp; <code>{{#each $sKey}}</code><br>";
-							$lines[] = "&nbsp;&nbsp;&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
-							$lines[] = "&nbsp;&nbsp; <code>{{/each}}</code><br>";
-						} else {
-							$lines[] = "&nbsp;&nbsp; {{{$sKey}}} <small>($sType)</small><br>";
-							if ($sType === 'image' || $sType === 'file') {
-								$lines[] = "&nbsp;&nbsp; {{{$sKey}_alt}} <small>(Alt Text)</small><br>";
-							}
-						}
-					}
-				}
-
-				$lines[] = "<code>{{/each}}</code>";
-			} elseif ($type === 'gallery') {
-				$lines[] = "<em>Loop (Gallery):</em><br>";
-				$lines[] = "<code>{{#each $key}}</code><br>";
-				$lines[] = "&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
-				$lines[] = "<code>{{/each}}</code>";
-			} elseif ($type === 'image' || $type === 'file') {
-				$lines[] = "URL: <code>{{{$key}}}</code><br>";
-				$lines[] = "Alt/Filename: <code>{{{$key}_alt}}</code>";
-			} else {
-				$lines[] = "Value: <code>{{{$key}}}</code>";
-			}
-
-			$lines[] = "</div>";
-		}
-
-		$content = implode("\n", $lines);
-		$block_dir = BLOCKS_BASE_PATH . $slug;
-		// Ensure directory exists (though generate_render_php usually handles it)
-		if (!file_exists($block_dir)) {
-			mkdir($block_dir, 0755, true);
-		}
-		file_put_contents($block_dir . '/cheat_sheet.html', $content);
-
-		return $content; // Return content for immediate display
-	}
-
 	// =========================================================
-	// Infrastructure helpers: filesystem, backup/restore, logging
+	// Infrastructure helpers: filesystem, logging
 	// =========================================================
 
 	/**
@@ -1561,62 +1402,6 @@ class GutenKit_Generator
 			WP_Filesystem();
 		}
 		return ($wp_filesystem instanceof WP_Filesystem_Base) ? $wp_filesystem : null;
-	}
-
-	/**
-	 * Copies listed files from $source_dir to $backup_dir.
-	 * Only copies files that actually exist; returns true if at least one was backed up.
-	 */
-	private function backup_block_files($source_dir, $backup_dir, array $files)
-	{
-		$fs         = $this->get_filesystem();
-		$backed_up  = false;
-
-		if (!is_dir($backup_dir)) {
-			wp_mkdir_p($backup_dir);
-		}
-
-		foreach ($files as $file) {
-			$src = $source_dir . $file;
-			if (file_exists($src)) {
-				if ($fs) {
-					$fs->copy($src, $backup_dir . $file, true);
-				} else {
-					copy($src, $backup_dir . $file);
-				}
-				$backed_up = true;
-			}
-		}
-
-		return $backed_up;
-	}
-
-	/**
-	 * Restores files from $backup_dir back to $target_dir.
-	 */
-	private function restore_from_backup($backup_dir, $target_dir, array $files)
-	{
-		$fs = $this->get_filesystem();
-		foreach ($files as $file) {
-			$src = $backup_dir . $file;
-			if (file_exists($src)) {
-				if ($fs) {
-					$fs->copy($src, $target_dir . $file, true);
-				} else {
-					copy($src, $target_dir . $file);
-				}
-			}
-		}
-	}
-
-	/**
-	 * Removes a backup directory created by backup_block_files().
-	 */
-	private function cleanup_backup($backup_dir)
-	{
-		if (is_dir($backup_dir)) {
-			$this->delete_dir_recursive($backup_dir);
-		}
 	}
 
 	/**
