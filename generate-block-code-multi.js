@@ -20,6 +20,261 @@ const { FIELD_MAP, generateRepeaterInnerJSX } = require('./lib/fields');
 const convertRenderPhpToJsx = require('./lib/php-to-jsx');
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Field key validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+const VALID_KEY = /^[a-z][a-z0-9_]*$/;
+
+function validateFieldKeys(fields, blockPath) {
+    for (const field of fields) {
+        if (!VALID_KEY.test(field.key)) {
+            throw new Error(`Invalid field key "${field.key}" in ${blockPath}. Keys must match /^[a-z][a-z0-9_]*$/`);
+        }
+        if (field.subFields) {
+            for (const sub of field.subFields) {
+                if (!VALID_KEY.test(sub.key)) {
+                    throw new Error(`Invalid sub-field key "${sub.key}" in repeater "${field.key}" in ${blockPath}`);
+                }
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// render.php generation — ported from GutenKit_Generator::generate_render_php()
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MDAgNjAwIiB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIj4KICA8cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YxZjVmOSIgLz4KICA8ZyBmaWxsPSIjY2JkNWUxIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgzMjAsIDIyMCkiPgogICAgPHBhdGggZD0iTTM1LjIxNiAxMi43ODRDMzIuOTUxIDEwLjUxOSAzMC4yMDQgOS4zODMgMjcgOS4zODNzLTUuOTUyIDEuMTM2LTguMjE2IDMuNDAxQzE2LjUxOSAxNS4wNDkgMTUuMzgxIDE3Ljc5NiAxNS4zODEgMjFzMS4xMzYgNS45NTEgMy40IDguMjE2QzIxLjA0OSAzMS40ODEgMjMuNzk2IDMyLjYxOSAyNyAzMi42MTlzNS45NTEtMS4xMzYgOC4yMTYtMy40QzM3LjQ4MSAyNi45NTEgMzguNjE5IDI0LjIwNCAzOC42MTkgMjFzLTEuMTM2LTUuOTUxLTMuNC04LjIxNnoiIC8+CiAgICA8cGF0aCBkPSJNMTE1LjY1NCA4Ni4zOEw5Mi44MzIgNTQuNzAxYy0uODItMS4xMzQtMi4yNzItMS45Mi0zLjkwMi0xLjkyLTIuMDY0IDAtMy4yOTMgMS4xMDItMy45ODIgMi4wMjFsLTMxLjE2IDQyLjM2NC0yNS40NC0yOS40NzJhNC45MzUgNC45MzUgMCAwIDAtMy44ODQtMS43OWMtMS45NCAwLTMuNDkyIDEuMTgxLTQuMDU2IDIuMDVMNS4xODcgODUuNzc0di42NTljMCAxNy42NzIgMTQuMzI3IDMyIDMyIDMyaDEwMy40NTNjOC4yODQgMCAxNS4zNy0zLjE1NCAyMC4yMTQtOC42OTRMOTQuOTIgOTMuMjIxYzEuMDk2IDAgMi4xMzYtLjMxNiAzLjAyNS0uODg4Ljc4NC0uNTA1IDEuMzM1LTEuMjIxIDEuNTktMi4wNmwuNTc2LTIuMDFMMTE1LjY1NCA4Ni4zOEoiIC8+CiAgICA8cGF0aCBkPSJNMTQyLjEzMyA3Ljg2N0EyNi41NTYgMjYuNTU2IDAgMCAwIDEyMy4yNjcgMEgzMC43MzNDMTMuNzkyIDAgMCAxMy43OTIgMCAzMC43MzN2NzkuODE4bDkuODY3LTEzLjc2NmMxLjc4My0yLjQ5MyA0Ljc5OC00LjAxNiA3Ljk1LTQuMDE2czQuOTUgMS4xNTggNi43MTIgMy4xMjdMMzkuMjM2IDExNC4yeiIgLz4KICA8L2c+Cjwvc3ZnPg==';
+
+/**
+ * Generates render.php for a block from its config.json template and fields.
+ * Ported from PHP GutenKit_Generator::generate_render_php().
+ *
+ * @param {string} blockPath  Absolute path to the block source directory.
+ * @param {string} blockSlug  Block slug (kebab-case).
+ * @param {object} config     Parsed config.json contents.
+ */
+function generateRenderPhp(blockPath, blockSlug, config) {
+    if (!config.template) {
+        console.warn(`  ⚠️ No template in config for ${blockSlug}. Skipping render.php.`);
+        return;
+    }
+
+    let template = config.template;
+    const fields = config.fields || [];
+
+    // Build field type lookup maps
+    const repeaterFields = {};
+    const galleryFields = {};
+    const fieldTypeMap = {};
+
+    for (const field of fields) {
+        fieldTypeMap[field.key] = field.type;
+        if (field.type === 'repeater') {
+            repeaterFields[field.key] = field;
+        }
+        if (field.type === 'gallery') {
+            galleryFields[field.key] = field;
+        }
+    }
+
+    // --- 1. Process repeater/gallery loops ---
+    // Handles both {{#each key}}...{{/each}} and deprecated {{#key}}...{{/key}}
+
+    // Primary syntax: {{#each key}}...{{/each}}
+    template = template.replace(/\{\{#each\s+(\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (match, loopKey, inner) => {
+        return processLoop(loopKey, inner, repeaterFields, galleryFields, '$item');
+    });
+
+    // Deprecated syntax: {{#key}}...{{/key}} — warn and process
+    template = template.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (match, loopKey, inner) => {
+        if (repeaterFields[loopKey] || galleryFields[loopKey]) {
+            console.warn(`  ⚠️ Deprecated loop syntax {{#${loopKey}}}...{{/${loopKey}}} in ${blockSlug}. Use {{#each ${loopKey}}}...{{/each}} instead.`);
+            return processLoop(loopKey, inner, repeaterFields, galleryFields, '$item');
+        }
+        // Not a repeater/gallery — leave as-is
+        return match;
+    });
+
+    // --- 2. Handle top-level fields ---
+    for (const field of fields) {
+        const key = field.key;
+        const type = field.type;
+
+        // Skip repeater/gallery — already handled by loop processing
+        if (type === 'repeater' || type === 'gallery') continue;
+
+        let php = '';
+        switch (type) {
+            case 'image':
+            case 'file':
+                php = `<?php echo esc_url(!empty($attributes['${key}']['url']) ? $attributes['${key}']['url'] : '${PLACEHOLDER_IMAGE}'); ?>`;
+                // Handle alt: {{key_alt}}
+                const altPhp = `<?php echo esc_attr($attributes['${key}']['alt'] ?? $attributes['${key}']['filename'] ?? ''); ?>`;
+                template = template.split(`{{${key}_alt}}`).join(altPhp);
+                break;
+            case 'number':
+            case 'range':
+            case 'relational':
+                php = `<?php echo esc_html($attributes['${key}'] ?? ''); ?>`;
+                break;
+            case 'url':
+                php = `<?php echo esc_url($attributes['${key}'] ?? ''); ?>`;
+                break;
+            case 'color':
+            case 'date':
+            case 'time':
+            case 'datetime':
+            case 'icon':
+                php = `<?php echo esc_attr($attributes['${key}'] ?? ''); ?>`;
+                break;
+            case 'button':
+                php = `<?php if ( ! empty( $attributes['${key}']['url'] ) ): ?>`
+                    + `<a href="<?php echo esc_url( $attributes['${key}']['url'] ); ?>" class="gk-btn">`
+                    + `<?php echo esc_html( $attributes['${key}']['text'] ?? 'Click Here' ); ?>`
+                    + `</a><?php endif; ?>`;
+                break;
+            default:
+                // text, textarea, contentEditor — safe check for array
+                php = `<?php echo wp_kses_post(is_array($attributes['${key}'] ?? '') ? json_encode($attributes['${key}'] ?? '') : ($attributes['${key}'] ?? '')); ?>`;
+                break;
+        }
+
+        // Replace all {{key}} occurrences
+        template = template.split(`{{${key}}}`).join(php);
+    }
+
+    // --- 3. Wrap in PHP template ---
+    let fileContent = `<?php\n/**\n * Render ${blockSlug}\n */\n`;
+    fileContent += `try {\n`;
+    fileContent += `    $wrapper_classes = 'bf-block-' . esc_attr('${blockSlug}');\n`;
+    fileContent += `?>\n`;
+    fileContent += `<div class="<?php echo $wrapper_classes; ?>">\n${template}\n</div>\n`;
+    fileContent += `<?php\n`;
+    fileContent += `} catch (\\Throwable $e) {\n`;
+    fileContent += `    if (current_user_can('edit_posts')) {\n`;
+    fileContent += `        echo '<div style="border: 2px dashed red; padding: 10px; color: red;">';\n`;
+    fileContent += `        echo '<strong>Block Error (${blockSlug}):</strong> ' . esc_html($e->getMessage());\n`;
+    fileContent += `        echo '</div>';\n`;
+    fileContent += `    }\n`;
+    fileContent += `}\n?>`;
+
+    const renderPhpPath = path.join(blockPath, 'render.php');
+    fs.writeFileSync(renderPhpPath, fileContent, 'utf8');
+    console.log(` ✅ render.php generated for ${blockSlug}`);
+}
+
+/**
+ * Processes a single loop (repeater or gallery) and returns the PHP output.
+ *
+ * @param {string} loopKey         The field key being looped.
+ * @param {string} innerContent    The template content inside the loop tags.
+ * @param {object} repeaterFields  Map of repeater field keys to field definitions.
+ * @param {object} galleryFields   Map of gallery field keys to field definitions.
+ * @param {string} itemVar         PHP variable name for the loop item (e.g. '$item').
+ * @returns {string} PHP code for the loop.
+ */
+function processLoop(loopKey, innerContent, repeaterFields, galleryFields, itemVar) {
+    const isRepeater = loopKey in repeaterFields;
+    const isGallery = loopKey in galleryFields;
+
+    if (!isRepeater && !isGallery) {
+        // Not a known repeater/gallery — leave as-is
+        return `{{#each ${loopKey}}}${innerContent}{{/each}}`;
+    }
+
+    if (isGallery) {
+        // Gallery loop: item is {id, url, alt}
+        innerContent = innerContent.split('{{url}}').join(`<?php echo esc_url(${itemVar}['url'] ?? ''); ?>`);
+        innerContent = innerContent.split('{{alt}}').join(`<?php echo esc_attr(${itemVar}['alt'] ?? ''); ?>`);
+        innerContent = innerContent.split('{{id}}').join(`<?php echo esc_attr(${itemVar}['id'] ?? ''); ?>`);
+
+        const loopStart = `<?php if(!empty($attributes['${loopKey}']) && is_array($attributes['${loopKey}'])): ?>\n`
+            + `<?php foreach($attributes['${loopKey}'] as ${itemVar}): ?>`;
+        const loopEnd = `<?php endforeach; ?>\n<?php endif; ?>`;
+        return loopStart + innerContent + loopEnd;
+    }
+
+    // Repeater loop
+    const subFields = repeaterFields[loopKey].subFields || [];
+
+    for (const sub of subFields) {
+        const sKey = sub.key;
+        const sType = sub.type;
+        let phpReplacement = '';
+
+        switch (sType) {
+            case 'image':
+            case 'file':
+                phpReplacement = `<?php echo esc_url(!empty(${itemVar}['${sKey}']['url']) ? ${itemVar}['${sKey}']['url'] : '${PLACEHOLDER_IMAGE}'); ?>`;
+                // Handle Alt: {{key_alt}}
+                const altReplacement = `<?php echo esc_attr(${itemVar}['${sKey}']['alt'] ?? ${itemVar}['${sKey}']['filename'] ?? ''); ?>`;
+                innerContent = innerContent.replace(new RegExp(`\\{\\{\\s*${escapeRegex(sKey + '_alt')}\\s*\\}\\}`, 'g'), altReplacement);
+                break;
+            case 'number':
+            case 'range':
+            case 'relational':
+                phpReplacement = `<?php echo esc_html(${itemVar}['${sKey}'] ?? ''); ?>`;
+                break;
+            case 'url':
+                phpReplacement = `<?php echo esc_url(${itemVar}['${sKey}'] ?? ''); ?>`;
+                break;
+            case 'color':
+            case 'date':
+            case 'time':
+            case 'datetime':
+            case 'icon':
+                phpReplacement = `<?php echo esc_attr(${itemVar}['${sKey}'] ?? ''); ?>`;
+                break;
+            case 'gallery':
+                // Nested gallery loop inside repeater
+                // Primary: {{#each gallery_key}}...{{/each}}
+                innerContent = innerContent.replace(
+                    new RegExp(`\\{\\{#each\\s+${escapeRegex(sKey)}\\}\\}([\\s\\S]*?)\\{\\{\\/each\\}\\}`, 'g'),
+                    (gMatch, gInner) => processNestedGallery(sKey, gInner, itemVar)
+                );
+                // Deprecated: {{#gallery_key}}...{{/gallery_key}}
+                innerContent = innerContent.replace(
+                    new RegExp(`\\{\\{#${escapeRegex(sKey)}\\}\\}([\\s\\S]*?)\\{\\{\\/${escapeRegex(sKey)}\\}\\}`, 'g'),
+                    (gMatch, gInner) => processNestedGallery(sKey, gInner, itemVar)
+                );
+                // Fallback for direct {{gallery_key}} access
+                phpReplacement = `<?php echo (is_array(${itemVar}['${sKey}'] ?? '') ? count(${itemVar}['${sKey}'] ?? []) . ' images' : ''); ?>`;
+                break;
+            default:
+                // text, textarea, contentEditor
+                phpReplacement = `<?php echo wp_kses_post(is_array(${itemVar}['${sKey}'] ?? '') ? json_encode(${itemVar}['${sKey}'] ?? '') : (${itemVar}['${sKey}'] ?? '')); ?>`;
+                break;
+        }
+
+        // Replace {{subkey}} with PHP code
+        innerContent = innerContent.replace(new RegExp(`\\{\\{\\s*${escapeRegex(sKey)}\\s*\\}\\}`, 'g'), phpReplacement);
+    }
+
+    const loopStart = `<?php if(!empty($attributes['${loopKey}']) && is_array($attributes['${loopKey}'])): ?>\n`
+        + `<?php foreach($attributes['${loopKey}'] as ${itemVar}): ?>`;
+    const loopEnd = `<?php endforeach; ?>\n<?php endif; ?>`;
+    return loopStart + innerContent + loopEnd;
+}
+
+/**
+ * Processes a nested gallery loop inside a repeater.
+ */
+function processNestedGallery(sKey, gInner, parentItemVar) {
+    gInner = gInner.split('{{url}}').join("<?php echo esc_url($gItem['url'] ?? ''); ?>");
+    gInner = gInner.split('{{alt}}').join("<?php echo esc_attr($gItem['alt'] ?? ''); ?>");
+    gInner = gInner.split('{{id}}').join("<?php echo esc_attr($gItem['id'] ?? ''); ?>");
+    return `<?php if(!empty(${parentItemVar}['${sKey}']) && is_array(${parentItemVar}['${sKey}'])): foreach(${parentItemVar}['${sKey}'] as $gItem): ?>${gInner}<?php endforeach; endif; ?>`;
+}
+
+/**
+ * Escapes a string for use in a RegExp.
+ */
+function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Script helpers — one entry per supported type
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -303,10 +558,13 @@ function generateBlock(blockPath) {
         return;
     }
 
+    // 1b. Validate field keys
+    validateFieldKeys(config.fields, blockPath);
+
     // 2. Incremental Build Check
     // Include view.js and style.scss so they are regenerated when config changes
     const stylePath = path.join(blockPath, 'style.scss');
-    const outputFiles = [templatePath, blockJsonPath, attributesOutputPath, stylePath];
+    const outputFiles = [templatePath, blockJsonPath, attributesOutputPath, stylePath, renderPhpPath];
     if (config.scripts) outputFiles.push(viewJsPath);
 
     if (outputFiles.every(f => fs.existsSync(f))) {
@@ -434,6 +692,9 @@ function generateBlock(blockPath) {
 
     // 6b. Inject required base CSS for slider blocks into style.scss
     generateBaseStyleCss(blockPath, config);
+
+    // 6c. Generate render.php from config template
+    generateRenderPhp(blockPath, blockSlug, config);
 
     // 7. Generate Edit.js
     try {
