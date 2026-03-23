@@ -78,25 +78,23 @@ function generateRenderPhp(blockPath, blockSlug, config) {
         }
     }
 
-    // --- 1. Process repeater/gallery loops ---
-    // Handles both {{#each key}}...{{/each}} and deprecated {{#key}}...{{/key}}
+    // --- 1. Pre-check: reject deprecated {{#key}}...{{/key}} syntax ---
+    const deprecatedMatch = template.match(/\{\{#(?!each\s)(\w+)\}\}/);
+    if (deprecatedMatch) {
+        throw new Error(
+            `Build error in ${blockSlug}: deprecated loop syntax {{#${deprecatedMatch[1]}}} detected. ` +
+            `Use {{#each ${deprecatedMatch[1]}}}...{{/each}} instead.`
+        );
+    }
 
-    // Primary syntax: {{#each key}}...{{/each}}
+    // --- 2. Process repeater/gallery loops ---
+    // Only {{#each key}}...{{/each}} syntax is supported.
+
     template = template.replace(/\{\{#each\s+(\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g, (match, loopKey, inner) => {
         return processLoop(loopKey, inner, repeaterFields, galleryFields, '$item');
     });
 
-    // Deprecated syntax: {{#key}}...{{/key}} — warn and process
-    template = template.replace(/\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g, (match, loopKey, inner) => {
-        if (repeaterFields[loopKey] || galleryFields[loopKey]) {
-            console.warn(`  ⚠️ Deprecated loop syntax {{#${loopKey}}}...{{/${loopKey}}} in ${blockSlug}. Use {{#each ${loopKey}}}...{{/each}} instead.`);
-            return processLoop(loopKey, inner, repeaterFields, galleryFields, '$item');
-        }
-        // Not a repeater/gallery — leave as-is
-        return match;
-    });
-
-    // --- 2. Handle top-level fields ---
+    // --- 3. Handle top-level fields ---
     for (const field of fields) {
         const key = field.key;
         const type = field.type;
@@ -144,7 +142,7 @@ function generateRenderPhp(blockPath, blockSlug, config) {
         template = template.split(`{{${key}}}`).join(php);
     }
 
-    // --- 3. Wrap in PHP template ---
+    // --- 4. Wrap in PHP template ---
     let fileContent = `<?php\n/**\n * Render ${blockSlug}\n */\n`;
     fileContent += `try {\n`;
     fileContent += `    $wrapper_classes = 'bf-block-' . esc_attr('${blockSlug}');\n`;
@@ -228,14 +226,9 @@ function processLoop(loopKey, innerContent, repeaterFields, galleryFields, itemV
                 break;
             case 'gallery':
                 // Nested gallery loop inside repeater
-                // Primary: {{#each gallery_key}}...{{/each}}
+                // Only {{#each gallery_key}}...{{/each}} syntax is supported.
                 innerContent = innerContent.replace(
                     new RegExp(`\\{\\{#each\\s+${escapeRegex(sKey)}\\}\\}([\\s\\S]*?)\\{\\{\\/each\\}\\}`, 'g'),
-                    (gMatch, gInner) => processNestedGallery(sKey, gInner, itemVar)
-                );
-                // Deprecated: {{#gallery_key}}...{{/gallery_key}}
-                innerContent = innerContent.replace(
-                    new RegExp(`\\{\\{#${escapeRegex(sKey)}\\}\\}([\\s\\S]*?)\\{\\{\\/${escapeRegex(sKey)}\\}\\}`, 'g'),
                     (gMatch, gInner) => processNestedGallery(sKey, gInner, itemVar)
                 );
                 // Fallback for direct {{gallery_key}} access
