@@ -14,9 +14,6 @@ class GutenKit_ConfigManager {
 	/** @var GutenKit_CheatSheet|null */
 	private $cheat_sheet = null;
 
-	/** @var GutenKit_Generator|null Temporary transition bridge — removed in Task 5 */
-	private $generator = null;
-
 	public function __construct() {
 		add_action( 'wp_ajax_block_factory_save_structure', array( $this, 'handle_save_structure' ) );
 	}
@@ -29,16 +26,10 @@ class GutenKit_ConfigManager {
 	}
 
 	/**
-	 * Inject the Generator dependency (transition bridge).
-	 */
-	public function set_generator( $generator ) {
-		$this->generator = $generator;
-	}
-
-	/**
 	 * AJAX handler: wp_ajax_block_factory_save_structure
 	 *
-	 * Saves config.json, triggers file regeneration (transition), and returns cheat-sheet HTML.
+	 * Saves config.json and returns cheat-sheet HTML.
+	 * File generation is handled by Node.js during npm build.
 	 */
 	public function handle_save_structure() {
 		// Nonce action MUST match class-gutenkit-admin.php line 101
@@ -69,14 +60,6 @@ class GutenKit_ConfigManager {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ) );
 		}
 
-		// TRANSITION: Call Generator for file regeneration until Tasks 4-5 remove this
-		$regen_skipped = false;
-		if ( $result === 'unchanged' ) {
-			$regen_skipped = true;
-		} elseif ( $this->generator ) {
-			$this->generator->regenerate_files_from_config( $block_slug, $config_data );
-		}
-
 		// Generate cheat sheet
 		$cheat_sheet_html = '';
 		if ( $this->cheat_sheet && ! empty( $config_data['fields'] ) ) {
@@ -86,7 +69,7 @@ class GutenKit_ConfigManager {
 
 		$this->delete_transient_cache();
 
-		$unchanged_note = $regen_skipped ? ' (files already up to date, skipped regeneration)' : '';
+		$unchanged_note = ( $result === 'unchanged' ) ? ' (config unchanged, skipped write)' : '';
 		wp_send_json_success( array(
 			'message'     => 'Block structure saved!' . $unchanged_note,
 			'next_step'   => 'Run build.',

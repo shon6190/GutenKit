@@ -43,7 +43,6 @@ class GutenKit_Loader
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-config-manager.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-block-creator.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-block-builder.php';
-		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-generator.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-ai.php';
 
 		if (is_admin()) {
@@ -70,12 +69,6 @@ class GutenKit_Loader
 
 		// Instantiate BlockBuilder (npm build / install endpoints)
 		$block_builder = new GutenKit_BlockBuilder( $this->node_env );
-
-		// Instantiate Generator (file regeneration only)
-		$generator = new GutenKit_Generator();
-
-		// Transition bridge: ConfigManager delegates file regen to Generator
-		$config_manager->set_generator( $generator );
 
 		// Instantiate AI Module
 		$ai = new GutenKit_AI();
