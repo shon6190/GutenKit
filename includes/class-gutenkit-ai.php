@@ -158,6 +158,100 @@ class GutenKit_AI
         <?php
     }
 
+    private function get_providers() {
+        return array(
+            'groq' => array(
+                'option'   => 'gutenkit_groq_api_key',
+                'endpoint' => 'https://api.groq.com/openai/v1/chat/completions',
+                'model'    => 'llama3-70b-8192',
+                'format'   => 'openai',
+                'headers'  => array(),
+            ),
+            'openrouter' => array(
+                'option'   => 'gutenkit_openrouter_api_key',
+                'endpoint' => 'https://openrouter.ai/api/v1/chat/completions',
+                'model'    => 'openrouter/auto',
+                'format'   => 'openai',
+                'headers'  => array( 'HTTP-Referer' => site_url() ),
+            ),
+            'openai' => array(
+                'option'   => 'gutenkit_openai_api_key',
+                'endpoint' => 'https://api.openai.com/v1/chat/completions',
+                'model'    => 'gpt-4o-mini',
+                'format'   => 'openai',
+                'headers'  => array(),
+            ),
+            'gemini' => array(
+                'option'   => 'gutenkit_gemini_api_key',
+                'endpoint' => '', // Built dynamically
+                'model'    => 'gemini-2.5-flash',
+                'format'   => 'gemini',
+                'headers'  => array(),
+            ),
+        );
+    }
+
+    private function call_provider( $provider, $api_key, $system_message, $prompt ) {
+        $timeout = 60;
+
+        if ( $provider['format'] === 'gemini' ) {
+            $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$provider['model']}:generateContent?key={$api_key}";
+            // Gemini doesn't use standard system instructions in the same exact format in the free basic REST API as OpenAI,
+            // but we can prepend it to the prompt or use the system_instruction field if available.
+            // For broad compatibility, we combine them.
+            $combined_prompt = "System Instructions:\n" . $system_message . "\n\nUser Request:\n" . $prompt;
+            $body = array(
+                'contents' => array(
+                    array( 'parts' => array( array( 'text' => $combined_prompt ) ) ),
+                ),
+                'generationConfig' => array( 'temperature' => 0.2 ),
+            );
+            $response = wp_remote_post( $endpoint, array(
+                'headers' => array( 'Content-Type' => 'application/json' ),
+                'body'    => wp_json_encode( $body ),
+                'timeout' => $timeout,
+            ) );
+            if ( is_wp_error( $response ) ) return $response;
+            $data = json_decode( wp_remote_retrieve_body( $response ), true );
+            if ( isset( $data['error'] ) ) {
+                return new WP_Error( 'api_error', $data['error']['message'] ?? 'Gemini API error' );
+            }
+            return $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+        }
+
+        // OpenAI-compatible format (OpenAI, Groq, OpenRouter)
+        $headers = array_merge(
+            array(
+                'Content-Type'  => 'application/json',
+                'Authorization' => 'Bearer ' . $api_key,
+            ),
+            $provider['headers']
+        );
+        $body = array(
+            'model'       => $provider['model'],
+            'messages'    => array(
+                array( 'role' => 'system', 'content' => $system_message ),
+                array( 'role' => 'user', 'content' => $prompt ),
+            ),
+            'temperature' => 0.2,
+        );
+        $response = wp_remote_post( $provider['endpoint'], array(
+            'headers' => $headers,
+            'body'    => wp_json_encode( $body ),
+            'timeout' => $timeout,
+        ) );
+        if ( is_wp_error( $response ) ) return $response;
+        $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( isset( $data['error'] ) ) {
+            $err_msg = $data['error']['message'] ?? 'API error';
+            if ( isset( $data['error']['metadata'] ) ) {
+                $err_msg .= ' (' . wp_json_encode( $data['error']['metadata'] ) . ')';
+            }
+            return new WP_Error( 'api_error', $err_msg );
+        }
+        return $data['choices'][0]['message']['content'] ?? '';
+    }
+
     public function generate_ai_template()
     {
         // 1. Validate Nonce
@@ -177,32 +271,7 @@ class GutenKit_AI
             wp_send_json_error(array('message' => 'Prompt cannot be empty.'));
         }
 
-        // 4. API Key Resolution
-        $groq_key       = $this->decrypt_key( get_option( 'gutenkit_groq_api_key', '' ) );
-        $openrouter_key = $this->decrypt_key( get_option( 'gutenkit_openrouter_api_key', '' ) );
-        $openai_key     = $this->decrypt_key( get_option( 'gutenkit_openai_api_key', '' ) );
-        $gemini_key     = $this->decrypt_key( get_option( 'gutenkit_gemini_api_key', '' ) );
-
-        $provider = '';
-        $api_key = '';
-
-        if (!empty($groq_key)) {
-            $provider = 'groq';
-            $api_key = $groq_key;
-        } elseif (!empty($openrouter_key)) {
-            $provider = 'openrouter';
-            $api_key = $openrouter_key;
-        } elseif (!empty($openai_key)) {
-            $provider = 'openai';
-            $api_key = $openai_key;
-        } elseif (!empty($gemini_key)) {
-            $provider = 'gemini';
-            $api_key = $gemini_key;
-        } else {
-            wp_send_json_error(array('message' => 'To use the AI Template Generator, please enter your free Groq, OpenRouter, OpenAI, or Gemini API Key in the GutenKit Settings.'));
-        }
-
-        // 5. Build System Prompt
+        // 4. Build System Prompt
         $system_message = "You are an expert web developer building a Gutenberg block. The user has defined the following fields:\n" . json_encode($fields) . "\n\n";
         $system_message .= "Task: Create the HTML and Vanilla CSS based on the user's prompt.\n";
         $system_message .= "Rules:\n";
@@ -212,22 +281,25 @@ class GutenKit_AI
         $system_message .= "4. Output clean, modern HTML and CSS (use flexbox/grid layout).\n";
         $system_message .= "5. Wrap the main HTML in a div with a unique class (e.g. .gk-block-wrapper) and namespace the CSS to that class so it doesn't affect the rest of the site.\n";
 
-        // 6. Call the appropriate API
-        if ($provider === 'groq') {
-            $result = $this->call_groq($api_key, $system_message, $prompt);
-        } elseif ($provider === 'openrouter') {
-            $result = $this->call_openrouter($api_key, $system_message, $prompt);
-        } elseif ($provider === 'openai') {
-            $result = $this->call_openai($api_key, $system_message, $prompt);
-        } elseif ($provider === 'gemini') {
-            $result = $this->call_gemini($api_key, $system_message, $prompt);
+        // 5. Try each provider in priority order; stop at first success
+        $providers = $this->get_providers();
+        $result = null;
+
+        foreach ( $providers as $name => $provider ) {
+            $key = $this->decrypt_key( get_option( $provider['option'], '' ) );
+            if ( empty( $key ) ) continue;
+            $result = $this->call_provider( $provider, $key, $system_message, $prompt );
+            if ( ! is_wp_error( $result ) && ! empty( $result ) ) break;
         }
 
-        if (is_wp_error($result)) {
-            wp_send_json_error(array('message' => $result->get_error_message()));
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( array( 'message' => $result->get_error_message() ) );
+        }
+        if ( empty( $result ) ) {
+            wp_send_json_error( array( 'message' => 'To use the AI Template Generator, please enter your free Groq, OpenRouter, OpenAI, or Gemini API Key in the GutenKit Settings.' ) );
         }
 
-        // 7. Parse Result
+        // 6. Parse Result
         $json_response = json_decode($result, true);
 
         if (json_last_error() === JSON_ERROR_NONE && isset($json_response['html']) && isset($json_response['css'])) {
@@ -249,174 +321,5 @@ class GutenKit_AI
 
             wp_send_json_error(array('message' => 'The AI response was not formatted correctly. Please try again.', 'debug' => $result));
         }
-    }
-
-    private function call_openai($api_key, $system_message, $prompt)
-    {
-        $url = 'https://api.openai.com/v1/chat/completions';
-        $body = wp_json_encode(array(
-            'model' => 'gpt-4o-mini',
-            'messages' => array(
-                array('role' => 'system', 'content' => $system_message),
-                array('role' => 'user', 'content' => $prompt),
-            ),
-            'temperature' => 0.2, // Low temp for more deterministic code
-        ));
-
-        $args = array(
-            'body' => $body,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-            ),
-            'timeout' => 60,
-        );
-
-        $response = wp_remote_post($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (isset($data['error'])) {
-            return new WP_Error('api_error', $data['error']['message']);
-        }
-
-        return isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
-    }
-
-    private function call_gemini($api_key, $system_message, $prompt)
-    {
-        // Simple implementation of Gemini REST API call
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $api_key;
-
-        // Gemini doesn't use standard system instructions in the same exact format in the free basic REST API as OpenAI,
-        // but we can prepend it to the prompt or use the system_instruction field if available.
-        // For broad compatibility, we combine them.
-
-        $combined_prompt = "System Instructions:\n" . $system_message . "\n\nUser Request:\n" . $prompt;
-
-        $body = wp_json_encode(array(
-            'contents' => array(
-                array(
-                    'parts' => array(
-                        array('text' => $combined_prompt)
-                    )
-                )
-            ),
-            'generationConfig' => array(
-                'temperature' => 0.2
-            )
-        ));
-
-        $args = array(
-            'body' => $body,
-            'headers' => array(
-                'Content-Type' => 'application/json',
-            ),
-            'timeout' => 60,
-        );
-
-        $response = wp_remote_post($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (isset($data['error'])) {
-            return new WP_Error('api_error', $data['error']['message']);
-        }
-
-        // Parse Gemini response
-        if (isset($data['candidates'][0]['content']['parts'][0]['text'])) {
-            return $data['candidates'][0]['content']['parts'][0]['text'];
-        }
-
-        return '';
-    }
-
-    private function call_groq($api_key, $system_message, $prompt)
-    {
-        $url = 'https://api.groq.com/openai/v1/chat/completions';
-        $body = wp_json_encode(array(
-            'model' => 'llama3-70b-8192',
-            'messages' => array(
-                array('role' => 'system', 'content' => $system_message),
-                array('role' => 'user', 'content' => $prompt),
-            ),
-            'temperature' => 0.2, // Low temp for more deterministic code
-        ));
-
-        $args = array(
-            'body' => $body,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-            ),
-            'timeout' => 60,
-        );
-
-        $response = wp_remote_post($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (isset($data['error'])) {
-            return new WP_Error('api_error', $data['error']['message']);
-        }
-
-        return isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
-    }
-
-    private function call_openrouter($api_key, $system_message, $prompt)
-    {
-        $url = 'https://openrouter.ai/api/v1/chat/completions';
-        $body = wp_json_encode(array(
-            'model' => 'openrouter/auto', // Will auto-route to a free model if available, falling back to a paid model
-            'messages' => array(
-                array('role' => 'system', 'content' => $system_message),
-                array('role' => 'user', 'content' => $prompt),
-            ),
-            'temperature' => 0.2, // Low temp for more deterministic code
-        ));
-
-        $args = array(
-            'body' => $body,
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type' => 'application/json',
-                'HTTP-Referer' => site_url(), // OpenRouter requires referer
-            ),
-            'timeout' => 60,
-        );
-
-        $response = wp_remote_post($url, $args);
-
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (isset($data['error'])) {
-            $err_msg = isset($data['error']['message']) ? $data['error']['message'] : 'Unknown error';
-            if (isset($data['error']['metadata'])) {
-                $err_msg .= ' (' . wp_json_encode($data['error']['metadata']) . ')';
-            }
-            return new WP_Error('api_error', $err_msg);
-        }
-
-        return isset($data['choices'][0]['message']['content']) ? $data['choices'][0]['message']['content'] : '';
     }
 }
