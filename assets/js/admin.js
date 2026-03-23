@@ -1,99 +1,101 @@
-jQuery(document).ready(function ($) {
-    $('.block-factory-delete-btn').on('click', function (e) {
-        e.preventDefault();
+/**
+ * Block Factory admin page — vanilla JS (no jQuery).
+ *
+ * Three features:
+ * 1. Delete block button
+ * 2. Install dependencies button
+ * 3. Dashicon picker
+ */
+document.addEventListener('DOMContentLoaded', function () {
 
-        const blockSlug = $(this).data('slug');
+    // --- 1. Delete Block ---
+    document.querySelectorAll('.block-factory-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
 
-        if (confirm(`WARNING: Are you sure you want to permanently delete the block "${blockSlug}"? This action cannot be undone and will remove all associated files (config.json, edit.js, block.json, etc.)`)) {
+            var blockSlug = this.dataset.slug;
 
-            // Disable the link while saving
-            const $btn = $(this);
-            $btn.text('Deleting...');
-            $btn.prop('disabled', true);
+            if (!confirm('WARNING: Are you sure you want to permanently delete the block "' + blockSlug + '"? This action cannot be undone and will remove all associated files (config.json, edit.js, block.json, etc.)')) {
+                return;
+            }
 
-            // Send AJAX request to delete the files
-            $.post(ajaxurl, {
-                    action: 'block_factory_delete_block',
-                    nonce: blockFactoryAdmin.nonce, // Assuming you have a global nonce defined
-                    block_slug: blockSlug
-                })
-                .done(function (response) {
+            btn.textContent = 'Deleting...';
+            btn.disabled = true;
+
+            var body = new FormData();
+            body.append('action', 'block_factory_delete_block');
+            body.append('nonce', window.blockFactoryAdmin.nonce);
+            body.append('block_slug', blockSlug);
+
+            fetch(window.ajaxurl, { method: 'POST', credentials: 'same-origin', body: body })
+                .then(function (r) { return r.json(); })
+                .then(function (response) {
                     if (response.success) {
-                        alert(`Block ${blockSlug} successfully deleted!`);
-                        // Reload the page to refresh the component list
+                        alert('Block ' + blockSlug + ' successfully deleted!');
                         window.location.reload();
                     } else {
                         alert('Deletion Error: ' + response.data.message);
-                        $btn.text('Delete');
-                        $btn.prop('disabled', false);
+                        btn.textContent = 'Delete';
+                        btn.disabled = false;
                     }
                 })
-                .fail(function () {
+                .catch(function () {
                     alert('Critical Error: Failed to communicate with the server.');
-                    $btn.text('Delete');
-                    $btn.prop('disabled', false);
+                    btn.textContent = 'Delete';
+                    btn.disabled = false;
                 });
-        }
+        });
     });
 
-    // $('#build-block-btn').on('click', function () {
-    //     // Optionally, add a spinner or disable button here
-    //     $.ajax({
-    //         url: blockFactoryAdmin.ajaxurl,
-    //         type: 'POST',
-    //         data: {
-    //             action: 'bf_run_npm_build',
-    //             nonce: blockFactoryAdmin.nonce, // Add nonce for security
-    //         },
-    //         success: function (response) {
-    //             alert(response); // Or update UI with success/failure
-    //         },
-    //         error: function () {
-    //             alert('Error running build.');
-    //         }
-    //     });
-    // });
+    // --- 2. Install Dependencies ---
+    var installBtn = document.getElementById('bf-install-dependencies-btn');
+    if (installBtn) {
+        installBtn.addEventListener('click', function (e) {
+            e.preventDefault();
 
-    // Handle Install Dependencies
-    $('#bf-install-dependencies-btn').on('click', function (e) {
-        e.preventDefault();
-        const $btn = $(this);
-        const $progress = $('#bf-install-progress');
-        const $output = $('#bf-install-output');
+            var progress = document.getElementById('bf-install-progress');
+            var output   = document.getElementById('bf-install-output');
 
-        if (!confirm('This will download and install Node.js dependencies (approx 200MB). It may take a few minutes. Continue?')) {
-            return;
-        }
+            if (!confirm('This will download and install Node.js dependencies (approx 200MB). It may take a few minutes. Continue?')) {
+                return;
+            }
 
-        $btn.prop('disabled', true).text('Installing...');
-        $progress.show();
-        $output.hide().empty();
+            installBtn.disabled = true;
+            installBtn.textContent = 'Installing...';
+            if (progress) progress.style.display = '';
+            if (output) { output.style.display = 'none'; output.innerHTML = ''; }
 
-        $.post(ajaxurl, {
-                action: 'bf_install_dependencies',
-                nonce: blockFactoryAdmin.nonce
-            })
-            .done(function (response) {
-                if (response.success) {
-                    $output.html(response.data.output).show();
-                    alert('Dependencies installed successfully! Reloading page...');
-                    window.location.reload();
-                } else {
-                    $output.html('Error:\n' + response.data.message + '\n\nOutput:\n' + response.data.output).show();
-                    alert('Installation Failed. Check the output log below.');
-                    $btn.prop('disabled', false).text('Install Dependencies');
-                }
-            })
-            .fail(function () {
-                alert('Server Error: Request failed or timed out. Please check your server logs.');
-                $btn.prop('disabled', false).text('Install Dependencies');
-            });
-    });
+            var body = new FormData();
+            body.append('action', 'bf_install_dependencies');
+            body.append('nonce', window.blockFactoryAdmin.nonce);
 
-    // --- Dashicon Picker Logic ---
+            fetch(window.ajaxurl, { method: 'POST', credentials: 'same-origin', body: body })
+                .then(function (r) { return r.json(); })
+                .then(function (response) {
+                    if (response.success) {
+                        if (output) { output.innerHTML = response.data.output; output.style.display = ''; }
+                        alert('Dependencies installed successfully! Reloading page...');
+                        window.location.reload();
+                    } else {
+                        if (output) {
+                            output.innerHTML = 'Error:\n' + response.data.message + '\n\nOutput:\n' + response.data.output;
+                            output.style.display = '';
+                        }
+                        alert('Installation Failed. Check the output log below.');
+                        installBtn.disabled = false;
+                        installBtn.textContent = 'Install Dependencies';
+                    }
+                })
+                .catch(function () {
+                    alert('Server Error: Request failed or timed out. Please check your server logs.');
+                    installBtn.disabled = false;
+                    installBtn.textContent = 'Install Dependencies';
+                });
+        });
+    }
 
-    // Curated list of useful dashboard icons for blocks
-    const curatedDashicons = [
+    // --- 3. Dashicon Picker ---
+    var curatedDashicons = [
         'editor-code', 'star-filled', 'star-half', 'star-empty', 'format-image',
         'format-gallery', 'format-video', 'format-audio', 'layout', 'grid-view',
         'list-view', 'admin-users', 'businessman', 'admin-site', 'admin-page',
@@ -107,81 +109,88 @@ jQuery(document).ready(function ($) {
         'edit', 'media-document', 'welcome-learn-more', 'shield', 'thumbs-up'
     ];
 
-    const $pickerBtn = $('#gutenkit-open-icon-picker');
-    const $pickerDropdown = $('#gutenkit-icon-picker-dropdown');
-    const $pickerGrid = $('#gutenkit-icon-picker-grid');
-    const $iconSearch = $('#gutenkit-icon-search');
-    const $iconInput = $('#component_icon');
-    const $iconPreview = $('#gutenkit-current-icon-preview');
+    var pickerBtn      = document.getElementById('gutenkit-open-icon-picker');
+    var pickerDropdown = document.getElementById('gutenkit-icon-picker-dropdown');
+    var pickerGrid     = document.getElementById('gutenkit-icon-picker-grid');
+    var iconSearch     = document.getElementById('gutenkit-icon-search');
+    var iconInput      = document.getElementById('component_icon');
+    var iconPreview    = document.getElementById('gutenkit-current-icon-preview');
 
-    // Populate grid
     function renderIcons(iconsToRender) {
-        $pickerGrid.empty();
+        if (!pickerGrid) return;
+        pickerGrid.innerHTML = '';
+
         if (iconsToRender.length === 0) {
-            $pickerGrid.html('<div style="grid-column: 1/-1; text-align: center; padding: 10px; color: #64748b; font-size: 12px;">No icons found.</div>');
+            pickerGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 10px; color: #64748b; font-size: 12px;">No icons found.</div>';
             return;
         }
 
-        const currentVal = $iconInput.val().trim();
+        var currentVal = iconInput ? iconInput.value.trim() : '';
 
-        iconsToRender.forEach(slug => {
-            const isSelected = slug === currentVal ? 'is-selected' : '';
-            const $icon = $(`
-                <div class="gutenkit-icon-item ${isSelected}" data-slug="${slug}" title="${slug}">
-                    <span class="dashicons dashicons-${slug}"></span>
-                </div>
-            `);
-            $pickerGrid.append($icon);
+        iconsToRender.forEach(function (slug) {
+            var div = document.createElement('div');
+            div.className = 'gutenkit-icon-item' + (slug === currentVal ? ' is-selected' : '');
+            div.dataset.slug = slug;
+            div.title = slug;
+            div.innerHTML = '<span class="dashicons dashicons-' + slug + '"></span>';
+            pickerGrid.appendChild(div);
         });
     }
 
-    if ($pickerGrid.length) {
+    if (pickerGrid) {
         renderIcons(curatedDashicons);
 
-        // Open Picker
-        $pickerBtn.on('click', function (e) {
-            e.stopPropagation();
-            $pickerDropdown.toggleClass('is-open');
-            if ($pickerDropdown.hasClass('is-open')) {
-                // Re-render to show updated selection state based on current input
-                renderIcons(curatedDashicons);
-                // Clear search and refocus
-                $iconSearch.val('').focus();
-            }
-        });
+        // Open picker
+        if (pickerBtn) {
+            pickerBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                pickerDropdown.classList.toggle('is-open');
+                if (pickerDropdown.classList.contains('is-open')) {
+                    renderIcons(curatedDashicons);
+                    if (iconSearch) { iconSearch.value = ''; iconSearch.focus(); }
+                }
+            });
+        }
 
         // Close on outside click
-        $(document).on('click', function (e) {
-            if (!$(e.target).closest('.gutenkit-icon-picker-wrapper').length) {
-                $pickerDropdown.removeClass('is-open');
+        document.addEventListener('click', function (e) {
+            if (pickerDropdown && !e.target.closest('.gutenkit-icon-picker-wrapper')) {
+                pickerDropdown.classList.remove('is-open');
             }
         });
 
         // Prevent closing when clicking inside picker
-        $pickerDropdown.on('click', function (e) {
-            e.stopPropagation();
+        if (pickerDropdown) {
+            pickerDropdown.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
+        }
+
+        // Handle icon click (event delegation)
+        pickerGrid.addEventListener('click', function (e) {
+            var item = e.target.closest('.gutenkit-icon-item');
+            if (!item) return;
+            var selectedSlug = item.dataset.slug;
+            if (iconInput) iconInput.value = selectedSlug;
+            if (iconPreview) iconPreview.className = 'dashicons dashicons-' + selectedSlug;
+            if (pickerDropdown) pickerDropdown.classList.remove('is-open');
         });
 
-        // Handle icon click
-        $pickerGrid.on('click', '.gutenkit-icon-item', function () {
-            const selectedSlug = $(this).data('slug');
-            $iconInput.val(selectedSlug);
-            $iconPreview.attr('class', 'dashicons dashicons-' + selectedSlug);
-            $pickerDropdown.removeClass('is-open');
-        });
+        // Search
+        if (iconSearch) {
+            iconSearch.addEventListener('input', function () {
+                var query = this.value.toLowerCase().trim();
+                var filtered = curatedDashicons.filter(function (slug) { return slug.includes(query); });
+                renderIcons(filtered);
+            });
+        }
 
-        // Search logic
-        $iconSearch.on('input', function () {
-            const query = $(this).val().toLowerCase().trim();
-            const filtered = curatedDashicons.filter(slug => slug.includes(query));
-            renderIcons(filtered);
-        });
-
-        // Sync preview when input is typed manually
-        $iconInput.on('input', function () {
-            const val = $(this).val().trim() || 'editor-code';
-            $iconPreview.attr('class', 'dashicons dashicons-' + val);
-        });
+        // Sync preview on manual input
+        if (iconInput) {
+            iconInput.addEventListener('input', function () {
+                var val = this.value.trim() || 'editor-code';
+                if (iconPreview) iconPreview.className = 'dashicons dashicons-' + val;
+            });
+        }
     }
-
 });
