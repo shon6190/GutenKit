@@ -36,10 +36,40 @@ class GutenKit_AI
 
     public function register_ai_settings()
     {
-        register_setting('gutenkit_ai_settings_group', 'gutenkit_openai_api_key');
-        register_setting('gutenkit_ai_settings_group', 'gutenkit_gemini_api_key');
-        register_setting('gutenkit_ai_settings_group', 'gutenkit_groq_api_key');
-        register_setting('gutenkit_ai_settings_group', 'gutenkit_openrouter_api_key');
+        $keys = array(
+            'gutenkit_openai_api_key',
+            'gutenkit_gemini_api_key',
+            'gutenkit_groq_api_key',
+            'gutenkit_openrouter_api_key',
+        );
+        foreach ( $keys as $option_name ) {
+            register_setting( 'gutenkit_ai_settings_group', $option_name, array(
+                'sanitize_callback' => array( $this, 'encrypt_key' ),
+            ) );
+            // Preserve existing key when form field is submitted blank
+            add_filter( "pre_update_option_{$option_name}", function( $new_value, $old_value ) {
+                return empty( $new_value ) ? $old_value : $new_value;
+            }, 10, 2 );
+        }
+    }
+
+    public function encrypt_key( $plaintext ) {
+        if ( empty( $plaintext ) ) return '';
+        $key    = substr( hash( 'sha256', wp_salt( 'auth' ) ), 0, 32 );
+        $iv     = openssl_random_pseudo_bytes( 16 );
+        $cipher = openssl_encrypt( $plaintext, 'AES-256-CBC', $key, 0, $iv );
+        return base64_encode( $iv . $cipher );
+    }
+
+    private function decrypt_key( $encrypted ) {
+        if ( empty( $encrypted ) ) return '';
+        $key  = substr( hash( 'sha256', wp_salt( 'auth' ) ), 0, 32 );
+        $data = base64_decode( $encrypted );
+        if ( strlen( $data ) < 17 ) return '';
+        $iv     = substr( $data, 0, 16 );
+        $cipher = substr( $data, 16 );
+        $result = openssl_decrypt( $cipher, 'AES-256-CBC', $key, 0, $iv );
+        return $result !== false ? $result : '';
     }
 
     public function render_settings_page()
@@ -53,13 +83,23 @@ class GutenKit_AI
                 <?php settings_fields('gutenkit_ai_settings_group'); ?>
                 <?php do_settings_sections('gutenkit_ai_settings_group'); ?>
 
+                <?php
+                $openai_saved      = get_option( 'gutenkit_openai_api_key', '' );
+                $gemini_saved      = get_option( 'gutenkit_gemini_api_key', '' );
+                $groq_saved        = get_option( 'gutenkit_groq_api_key', '' );
+                $openrouter_saved  = get_option( 'gutenkit_openrouter_api_key', '' );
+                ?>
                 <table class="form-table">
                     <tr valign="top">
                         <th scope="row">OpenAI API Key</th>
                         <td>
                             <input type="password" name="gutenkit_openai_api_key"
-                                value="<?php echo esc_attr(get_option('gutenkit_openai_api_key')); ?>"
+                                value=""
+                                placeholder="<?php echo ! empty( $openai_saved ) ? '********' : ''; ?>"
                                 style="width:100%; max-width:400px;" />
+                            <?php if ( ! empty( $openai_saved ) ) : ?>
+                                <p class="description" style="color:#2271b1;">A key is currently saved. Leave blank to keep it unchanged.</p>
+                            <?php endif; ?>
                             <p class="description">Get your key from the <a href="https://platform.openai.com/api-keys"
                                     target="_blank">OpenAI Dashboard</a>.</p>
                         </td>
@@ -68,8 +108,12 @@ class GutenKit_AI
                         <th scope="row">Google Gemini API Key</th>
                         <td>
                             <input type="password" name="gutenkit_gemini_api_key"
-                                value="<?php echo esc_attr(get_option('gutenkit_gemini_api_key')); ?>"
+                                value=""
+                                placeholder="<?php echo ! empty( $gemini_saved ) ? '********' : ''; ?>"
                                 style="width:100%; max-width:400px;" />
+                            <?php if ( ! empty( $gemini_saved ) ) : ?>
+                                <p class="description" style="color:#2271b1;">A key is currently saved. Leave blank to keep it unchanged.</p>
+                            <?php endif; ?>
                             <p class="description">Get your key from <a href="https://aistudio.google.com/app/apikey"
                                     target="_blank">Google AI Studio</a>.</p>
                         </td>
@@ -78,8 +122,12 @@ class GutenKit_AI
                         <th scope="row">Groq API Key</th>
                         <td>
                             <input type="password" name="gutenkit_groq_api_key"
-                                value="<?php echo esc_attr(get_option('gutenkit_groq_api_key')); ?>"
+                                value=""
+                                placeholder="<?php echo ! empty( $groq_saved ) ? '********' : ''; ?>"
                                 style="width:100%; max-width:400px;" />
+                            <?php if ( ! empty( $groq_saved ) ) : ?>
+                                <p class="description" style="color:#2271b1;">A key is currently saved. Leave blank to keep it unchanged.</p>
+                            <?php endif; ?>
                             <p class="description">Llama 3 70b models. High rate limit. Get your key from <a href="https://console.groq.com/keys" target="_blank">Groq Console</a>.</p>
                         </td>
                     </tr>
@@ -87,8 +135,12 @@ class GutenKit_AI
                         <th scope="row">OpenRouter API Key</th>
                         <td>
                             <input type="password" name="gutenkit_openrouter_api_key"
-                                value="<?php echo esc_attr(get_option('gutenkit_openrouter_api_key')); ?>"
+                                value=""
+                                placeholder="<?php echo ! empty( $openrouter_saved ) ? '********' : ''; ?>"
                                 style="width:100%; max-width:400px;" />
+                            <?php if ( ! empty( $openrouter_saved ) ) : ?>
+                                <p class="description" style="color:#2271b1;">A key is currently saved. Leave blank to keep it unchanged.</p>
+                            <?php endif; ?>
                             <p class="description">Free Llama 3 models available. Get your key from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a>.</p>
                         </td>
                     </tr>
@@ -126,10 +178,10 @@ class GutenKit_AI
         }
 
         // 4. API Key Resolution
-        $groq_key = get_option('gutenkit_groq_api_key');
-        $openrouter_key = get_option('gutenkit_openrouter_api_key');
-        $openai_key = get_option('gutenkit_openai_api_key');
-        $gemini_key = get_option('gutenkit_gemini_api_key');
+        $groq_key       = $this->decrypt_key( get_option( 'gutenkit_groq_api_key', '' ) );
+        $openrouter_key = $this->decrypt_key( get_option( 'gutenkit_openrouter_api_key', '' ) );
+        $openai_key     = $this->decrypt_key( get_option( 'gutenkit_openai_api_key', '' ) );
+        $gemini_key     = $this->decrypt_key( get_option( 'gutenkit_gemini_api_key', '' ) );
 
         $provider = '';
         $api_key = '';

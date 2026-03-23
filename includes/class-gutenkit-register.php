@@ -15,8 +15,6 @@ class GutenKit_Register
 	public function __construct()
 	{
 		add_action('init', array($this, 'register_blocks'));
-		// Shortcode support for backward compatibility or usage in posts
-		add_shortcode('bf_block', array($this, 'handle_shortcode'));
 	}
 
 	public function register_blocks()
@@ -118,38 +116,5 @@ class GutenKit_Register
 		}
 	}
 
-	/**
-	 * Shortcode Handler for [bf_block]
-	 * Keeps compatibility and allows manual placement.
-	 */
-	public function handle_shortcode($atts)
-	{
-		$a = shortcode_atts(array(
-			'slug' => '',
-			'attributes' => '',
-			'content' => '',
-		), $atts);
 
-		if (empty($a['slug'])) {
-			return '';
-		}
-
-		$attributes = array();
-		if (!empty($a['attributes'])) {
-			// Try standard JSON decode first
-			$decoded = json_decode($a['attributes'], true);
-			if (json_last_error() === JSON_ERROR_NONE) {
-				$attributes = $decoded;
-			} else {
-				// Try Base64 decode (new format)
-				$decoded_b64 = base64_decode($a['attributes']);
-				$decoded_json = json_decode($decoded_b64, true);
-				if (json_last_error() === JSON_ERROR_NONE) {
-					$attributes = $decoded_json;
-				}
-			}
-		}
-
-		return $this->render_block($a['slug'], $attributes, $a['content']);
-	}
 }
