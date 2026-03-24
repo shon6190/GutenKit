@@ -50,9 +50,12 @@ class GutenKit_CheatSheet {
 							$lines[] = "&nbsp;&nbsp;&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
 							$lines[] = "&nbsp;&nbsp; <code>{{/each}}</code><br>";
 						} else {
-							$lines[] = "&nbsp;&nbsp; {{{$sKey}}} <small>($sType)</small><br>";
 							if ( $sType === 'image' || $sType === 'file' ) {
-								$lines[] = "&nbsp;&nbsp; {{{$sKey}_alt}} <small>(Alt Text)</small><br>";
+								$sub_img = htmlspecialchars( '<img src="{{' . $sKey . '}}" alt="{{' . $sKey . '_alt}}" />' );
+								$lines[] = "&nbsp;&nbsp; <code style='display:inline-block;background:#f6f8fa;padding:2px 6px;border-radius:3px;user-select:all;'>$sub_img</code> <small>($sType)</small><br>";
+								$lines[] = "&nbsp;&nbsp; Alt: <code>{{{$sKey}_alt}}</code> <small>(falls back to filename)</small><br>";
+							} else {
+								$lines[] = "&nbsp;&nbsp; <code>{{{$sKey}}}</code> <small>($sType)</small><br>";
 							}
 						}
 					}
@@ -65,8 +68,12 @@ class GutenKit_CheatSheet {
 				$lines[] = "&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
 				$lines[] = '<code>{{/each}}</code>';
 			} elseif ( $type === 'image' || $type === 'file' ) {
-				$lines[] = "URL: <code>{{{$key}}}</code><br>";
-				$lines[] = "Alt/Filename: <code>{{{$key}_alt}}</code>";
+				$img_snippet = htmlspecialchars( '<img src="{{' . $key . '}}" alt="{{' . $key . '_alt}}" />' );
+				$lines[] = "<em>Copy snippet:</em><br>";
+				$lines[] = "<code style='display:block;background:#f6f8fa;padding:4px 8px;margin:4px 0;border-radius:3px;user-select:all;'>$img_snippet</code>";
+				$lines[] = "<small style='color:#555;'>Alt falls back to filename if not set.</small><br>";
+				$lines[] = "<br>URL only: <code>{{{$key}}}</code><br>";
+				$lines[] = "Alt text: <code>{{{$key}_alt}}</code>";
 			} else {
 				$lines[] = "Value: <code>{{{$key}}}</code>";
 			}

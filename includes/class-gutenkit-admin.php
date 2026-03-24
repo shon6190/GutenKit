@@ -101,6 +101,13 @@ class GutenKit_Admin
 		$nonce = wp_create_nonce('block_factory_save_structure_action');
 		$script_handle = 'block-factory-editor-app';
 
+		// Pre-generate cheat sheet for existing fields
+		$cheat_sheet_html = '';
+		if ( ! empty( $config['fields'] ) ) {
+			$cheat = new GutenKit_CheatSheet();
+			$cheat_sheet_html = $cheat->generate( $config['fields'] );
+		}
+
 		// Enqueue React Editor
 		$editor_app_path = BLOCK_FACTORY_PATH . 'admin/js/editor-app.js';
 		$editor_app_url = BLOCK_FACTORY_URL . 'admin/js/editor-app.js';
@@ -115,10 +122,11 @@ class GutenKit_Admin
 			);
 
 			wp_localize_script($script_handle, 'blockFactoryEditor', array(
-				'config' => $config,
-				'blockSlug' => $block_slug,
-				'nonce' => $nonce,
-				'ajaxurl' => admin_url('admin-ajax.php'),
+				'config'     => $config,
+				'blockSlug'  => $block_slug,
+				'nonce'      => $nonce,
+				'ajaxurl'    => admin_url('admin-ajax.php'),
+				'cheatSheet' => $cheat_sheet_html,
 			));
 		} else {
 			echo '<div class="notice notice-warning"><p>GutenKit: Admin editor-app.js missing. Run build.</p></div>';

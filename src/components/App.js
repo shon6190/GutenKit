@@ -150,6 +150,7 @@ export default function App({ initialConfig, blockSlug }) {
                     template: config.template,
                     setTemplate: config.setTemplate,
                     fields: config.fields,
+                    insertTagAtCursor: config.insertTagAtCursor,
                 }),
                 createElement(CSSEditor, {
                     css: config.css,

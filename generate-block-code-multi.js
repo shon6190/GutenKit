@@ -615,10 +615,10 @@ function generateBlock(blockPath) {
 
             generatedJSX += fieldJSX + '\n';
 
-            // Attributes
+            // Attributes — object types default to null so WordPress doesn't store undefined
             generatedAttributes[field.key] = {
                 type: map.attributeType,
-                default: field.default || undefined,
+                default: map.attributeType === 'object' ? null : (field.default || undefined),
             };
 
             if (field.type === 'contentEditor') {
@@ -682,6 +682,18 @@ function generateBlock(blockPath) {
 
     // 6. Generate view.js (frontend) from config.scripts — before edit.js so webpack picks it up
     generateViewJs(blockSlug, config.scripts || null);
+
+    // 6a. Remove "viewScript" from block.json if no view.js was generated
+    if (!fs.existsSync(viewJsPath)) {
+        try {
+            let blockJsonStr = fs.readFileSync(blockJsonPath, 'utf8');
+            blockJsonStr = blockJsonStr.replace(/,?\s*"viewScript"\s*:\s*"[^"]*"/g, '');
+            blockJsonStr = blockJsonStr.replace(/,\s*,/g, ',').replace(/,(\s*})/g, '$1');
+            fs.writeFileSync(blockJsonPath, blockJsonStr, 'utf8');
+        } catch (e) {
+            console.warn(`  ⚠️ Could not remove viewScript from block.json: ${e.message}`);
+        }
+    }
 
     // 6b. Inject required base CSS for slider blocks into style.scss
     generateBaseStyleCss(blockPath, config);

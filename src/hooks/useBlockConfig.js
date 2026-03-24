@@ -17,7 +17,7 @@ export default function useBlockConfig({ initialConfig, blockSlug }) {
     const [step, setStep]                 = useState(0);
     const [isSaving, setIsSaving]         = useState(false);
     const [message, setMessage]           = useState('');
-    const [cheatSheet, setCheatSheet]     = useState(null);
+    const [cheatSheet, setCheatSheet]     = useState(window.blockFactoryEditor?.cheatSheet || null);
     const [invalidFields, setInvalidFields] = useState({});
     const [selectedField, setSelectedField] = useState(null);
 
@@ -74,18 +74,17 @@ export default function useBlockConfig({ initialConfig, blockSlug }) {
     };
 
     // --- Template helpers ---
-    const insertTagAtCursor = (key) => {
+    const insertTagAtCursor = (snippet) => {
         const textarea = document.getElementById('bf-html-template-area');
         if (!textarea) return;
         const start = textarea.selectionStart;
         const end   = textarea.selectionEnd;
         const text  = textarea.value;
-        const tag   = '{{' + key + '}}';
-        const newContent = text.substring(0, start) + tag + text.substring(end);
+        const newContent = text.substring(0, start) + snippet + text.substring(end);
         setTemplate(newContent);
         setTimeout(() => {
             textarea.focus();
-            textarea.setSelectionRange(start + tag.length, start + tag.length);
+            textarea.setSelectionRange(start + snippet.length, start + snippet.length);
         }, 10);
     };
 

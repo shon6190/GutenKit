@@ -17,13 +17,20 @@ export function processTemplateForPreview(htmlTemplate, fieldList) {
         const escapedKey = field.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         if (field.type === 'image' || field.type === 'file') {
+            // Replace src="{{key}}" with placeholder image
             processed = processed.replace(
                 new RegExp('src=["\']\\{\\{\\s*' + escapedKey + '\\s*\\}\\}["\']', 'gi'),
                 'src="' + PREVIEW_PLACEHOLDER_SVG + '" style="max-width:100%;display:block;"'
             );
+            // Replace {{key_alt}} with descriptive text
             processed = processed.replace(
                 new RegExp('\\{\\{\\s*' + escapedKey + '_alt\\s*\\}\\}', 'g'),
-                field.label + ' alt'
+                field.label + ' alt text'
+            );
+            // Replace bare {{key}} (outside src attr) with a small placeholder image
+            processed = processed.replace(
+                new RegExp('\\{\\{\\s*' + escapedKey + '\\s*\\}\\}', 'g'),
+                '<img src="' + PREVIEW_PLACEHOLDER_SVG + '" alt="' + field.label + '" style="max-width:80px;height:50px;object-fit:cover;display:inline-block;vertical-align:middle;" />'
             );
         }
 
