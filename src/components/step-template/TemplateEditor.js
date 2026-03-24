@@ -7,8 +7,22 @@ function getSnippet(field) {
     if (field.type === 'image' || field.type === 'file') {
         return '<img src="{{' + field.key + '}}" alt="{{' + field.key + '_alt}}" />';
     }
-    if (field.type === 'repeater' || field.type === 'gallery') {
-        return '{{#each ' + field.key + '}}\n  \n{{/each}}';
+    if (field.type === 'gallery') {
+        return '{{#each ' + field.key + '}}\n  <img src="{{url}}" alt="{{alt}}" />\n{{/each}}';
+    }
+    if (field.type === 'repeater') {
+        const subFields = field.subFields || [];
+        const inner = subFields.map(sf => {
+            if (sf.type === 'image' || sf.type === 'file') {
+                return '  <img src="{{' + sf.key + '}}" alt="{{' + sf.key + '_alt}}" />';
+            }
+            if (sf.type === 'gallery') {
+                return '  {{#each ' + sf.key + '}}\n    <img src="{{url}}" alt="{{alt}}" />\n  {{/each}}';
+            }
+            return '  {{' + sf.key + '}}';
+        });
+        const body = inner.length ? '\n' + inner.join('\n') + '\n' : '\n  \n';
+        return '{{#each ' + field.key + '}}' + body + '{{/each}}';
     }
     return '{{' + field.key + '}}';
 }
