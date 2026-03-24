@@ -14,6 +14,7 @@ export default function useBlockConfig({ initialConfig, blockSlug }) {
     const [fields, setFields]             = useState(initialConfig.fields || []);
     const [template, setTemplate]         = useState(initialConfig.template || '');
     const [css, setCss]                   = useState(initialConfig.css || '');
+    const [scripts, setScripts]           = useState(initialConfig.scripts || null);
     const [step, setStep]                 = useState(0);
     const [isSaving, setIsSaving]         = useState(false);
     const [message, setMessage]           = useState('');
@@ -107,7 +108,7 @@ export default function useBlockConfig({ initialConfig, blockSlug }) {
         saveStructure({
             nonce,
             blockSlug,
-            configData: { fields, template, css },
+            configData: { fields, template, css, scripts },
         })
             .then(response => {
                 if (response.success) {
@@ -187,6 +188,7 @@ export default function useBlockConfig({ initialConfig, blockSlug }) {
         fields, setFields,
         template, setTemplate,
         css, setCss,
+        scripts, setScripts,
         step, setStep,
         isSaving,
         message, setMessage,

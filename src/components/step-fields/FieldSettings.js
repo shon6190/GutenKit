@@ -7,30 +7,14 @@ import { FIELD_TYPES } from './fieldTypes.js';
 import RepeaterSettings from './RepeaterSettings.js';
 
 const styles = {
-    placeholder: {
-        padding: '20px',
-        color: '#666',
-        fontStyle: 'italic',
-        border: '1px dashed #ccc',
-        marginTop: '10px',
-        borderRadius: '8px',
-    },
-    heading: {
-        margin: '0 0 20px 0',
-        fontSize: '16px',
-        fontWeight: '600',
-        color: 'var(--gk-text-main)',
-        borderBottom: '1px solid var(--gk-border-light)',
-        paddingBottom: '15px',
-    },
     errorBox: {
-        color: '#d94f4f',
+        color: 'var(--gk-error)',
         fontSize: '12px',
         marginBottom: '10px',
         padding: '10px',
-        backgroundColor: '#fbeaea',
-        border: '1px solid #f2c7c7',
-        borderRadius: '4px',
+        backgroundColor: 'var(--gk-error-container)',
+        border: '1px solid rgba(186,26,26,.3)',
+        borderRadius: 'var(--gk-radius)',
     },
 };
 
@@ -46,8 +30,10 @@ export default function FieldSettings({
     setDraggedSubIndex,
 }) {
     if (!selectedField) {
-        return createElement('p', { style: styles.placeholder },
-            'Select a field on the left to edit its settings.'
+        return createElement('div', { className: 'gk-field-settings' },
+            createElement('p', { className: 'gk-field-settings__placeholder' },
+                'Select a field on the left to configure it.'
+            )
         );
     }
 
@@ -65,9 +51,9 @@ export default function FieldSettings({
         setSelectedField(newFields[index]);
     };
 
-    return createElement('div', { className: 'gutenkit-field-settings-wrapper' },
-        createElement('h3', { style: styles.heading },
-            'Editing: ' + selectedField.label + ' (' + selectedField.type + ')'
+    return createElement('div', { className: 'gk-field-settings' },
+        createElement('h3', { className: 'gk-field-settings__heading' },
+            selectedField.label + ' — ' + selectedField.type
         ),
 
         createElement('div', { style: { marginBottom: '20px' } },

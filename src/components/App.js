@@ -18,38 +18,18 @@ import TemplateEditor from './step-template/TemplateEditor.js';
 import CSSEditor from './step-template/CSSEditor.js';
 import LivePreview from './step-template/LivePreview.js';
 import AIGenerator from './step-template/AIGenerator.js';
+import ScriptEditor from './step-template/ScriptEditor.js';
 
-const styles = {
-    root: { marginTop: '20px' },
-    stepBar: {
-        marginBottom: '20px',
-        padding: '10px',
-        background: '#e5e5e5',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    stepTitle: { margin: 0 },
-    columns: { display: 'flex', gap: '20px' },
-    settingsCol: { width: '40%' },
-    editorRow: { display: 'flex', gap: '20px' },
-    cheatPanel: { marginBottom: '20px', background: '#f0f6fc', border: '1px solid #cce5ff' },
-    cheatContent: { fontSize: '13px', lineHeight: '1.6', maxHeight: '250px', overflowY: 'auto', padding: '10px' },
-    divider: { margin: '30px 0 20px' },
-};
+function Icon({ name, style }) {
+    return createElement('span', {
+        className: 'material-symbols-outlined',
+        style,
+    }, name);
+}
 
-function messageStyle(msg) {
+function saveMessageClass(msg) {
     const isSuccess = msg.includes('Saved') || msg.includes('Complete') || msg.includes('ready');
-    return {
-        padding: '15px',
-        backgroundColor: isSuccess ? '#d4edda' : '#f8d7da',
-        color: isSuccess ? '#155724' : '#721c24',
-        border: '1px solid',
-        borderColor: isSuccess ? '#c3e6cb' : '#f5c6cb',
-        borderRadius: '4px',
-        textAlign: 'center',
-        fontWeight: 'bold',
-    };
+    return 'gk-save-message ' + (isSuccess ? 'is-success' : 'is-error');
 }
 
 export default function App({ initialConfig, blockSlug }) {
@@ -59,21 +39,32 @@ export default function App({ initialConfig, blockSlug }) {
     // STEP 0: Structure
     // ==========================================
     if (config.step === 0) {
-        return createElement('div', { style: styles.root },
+        return createElement('div', null,
+
             // Step bar
-            createElement('div', { style: styles.stepBar },
-                createElement('h2', { style: styles.stepTitle }, 'Step 1: Define Block Structure'),
-                createElement('div', null,
+            createElement('div', { className: 'gk-step-bar' },
+                createElement('h2', { className: 'gk-step-bar__title' }, 'Step 1 — Define Block Structure'),
+                createElement('div', { className: 'gk-step-bar__actions' },
+                    config.message && createElement('span', {
+                        style: {
+                            fontSize: '13px',
+                            color: config.message.startsWith('Warning') ? 'var(--gk-error)' : 'var(--gk-on-surface-variant)',
+                            maxWidth: '300px',
+                        },
+                    }, config.message),
                     createElement(Button, {
                         isPrimary: true,
                         isBusy: config.isSaving,
                         onClick: () => config.handleSave(false, 1),
-                    }, 'Next: Edit Template >')
+                    }, createElement('span', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+                        'Next: Edit Template',
+                        Icon({ name: 'arrow_forward', style: { fontSize: '16px' } })
+                    ))
                 )
             ),
 
             // Three-column layout
-            createElement('div', { style: styles.columns },
+            createElement('div', { className: 'gk-fields-layout' },
                 createElement(FieldPalette, { addField: config.addField }),
                 createElement(FieldList, {
                     fields: config.fields,
@@ -84,19 +75,17 @@ export default function App({ initialConfig, blockSlug }) {
                     setDraggedIndex: config.setDraggedIndex,
                     invalidFields: config.invalidFields,
                 }),
-                createElement('div', { style: styles.settingsCol },
-                    createElement(FieldSettings, {
-                        fields: config.fields,
-                        setFields: config.setFields,
-                        selectedField: config.selectedField,
-                        setSelectedField: config.setSelectedField,
-                        updateField: config.updateField,
-                        removeField: config.removeField,
-                        invalidFields: config.invalidFields,
-                        draggedSubIndex: config.draggedSubIndex,
-                        setDraggedSubIndex: config.setDraggedSubIndex,
-                    })
-                )
+                createElement(FieldSettings, {
+                    fields: config.fields,
+                    setFields: config.setFields,
+                    selectedField: config.selectedField,
+                    setSelectedField: config.setSelectedField,
+                    updateField: config.updateField,
+                    removeField: config.removeField,
+                    invalidFields: config.invalidFields,
+                    draggedSubIndex: config.draggedSubIndex,
+                    setDraggedSubIndex: config.setDraggedSubIndex,
+                })
             )
         );
     }
@@ -105,34 +94,30 @@ export default function App({ initialConfig, blockSlug }) {
     // STEP 1: Template & Design
     // ==========================================
     if (config.step === 1) {
-        // Determine if message is AI-related (shown inside AIGenerator)
         const isAiMessage = config.message && (config.message.includes('AI') || config.message.includes('generating') || config.message.includes('prompt'));
 
-        return createElement('div', { style: styles.root },
+        return createElement('div', null,
+
             // Step bar
-            createElement('div', { style: styles.stepBar },
+            createElement('div', { className: 'gk-step-bar' },
                 createElement(Button, {
                     isSecondary: true,
                     onClick: () => config.setStep(0),
-                }, '< Back to Structure'),
-                createElement('h2', { style: styles.stepTitle }, 'Step 2: Template & Design'),
+                }, createElement('span', { style: { display: 'flex', alignItems: 'center', gap: '6px' } },
+                    Icon({ name: 'arrow_back', style: { fontSize: '16px' } }),
+                    'Back to Structure'
+                )),
+                createElement('h2', { className: 'gk-step-bar__title' }, 'Step 2 — Template & Design'),
                 createElement(Button, {
                     isPrimary: true,
                     isBusy: config.isSaving,
                     onClick: () => config.handleSave(true),
-                }, config.isSaving ? 'Building...' : 'Save & Build Block')
-            ),
-
-            // Cheat sheet
-            config.cheatSheet && createElement(PanelBody, {
-                title: 'Template Snippets (Use these keys in your HTML)',
-                initialOpen: true,
-                style: styles.cheatPanel,
-            },
-                createElement('div', {
-                    dangerouslySetInnerHTML: { __html: config.cheatSheet },
-                    style: styles.cheatContent,
-                })
+                }, config.isSaving ? 'Building...' : createElement('span', {
+                    style: { display: 'flex', alignItems: 'center', gap: '6px' },
+                },
+                    Icon({ name: 'rocket_launch', style: { fontSize: '16px' } }),
+                    'Save & Build Block'
+                ))
             ),
 
             // AI Generator
@@ -144,18 +129,39 @@ export default function App({ initialConfig, blockSlug }) {
                 message: config.message,
             }),
 
-            // Template + CSS editors side by side
-            createElement('div', { style: styles.editorRow },
-                createElement(TemplateEditor, {
-                    template: config.template,
-                    setTemplate: config.setTemplate,
-                    fields: config.fields,
-                    insertTagAtCursor: config.insertTagAtCursor,
-                }),
-                createElement(CSSEditor, {
-                    css: config.css,
-                    setCss: config.setCss,
-                })
+            // Cheat sheet + editors (12-col split: 8 editors / 4 cheat sheet)
+            createElement('div', { className: 'gk-template-layout' },
+
+                // Left: HTML + CSS + Script editors stacked
+                createElement('div', { className: 'gk-editors-col' },
+                    createElement(TemplateEditor, {
+                        template: config.template,
+                        setTemplate: config.setTemplate,
+                        fields: config.fields,
+                        insertTagAtCursor: config.insertTagAtCursor,
+                    }),
+                    createElement(CSSEditor, {
+                        css: config.css,
+                        setCss: config.setCss,
+                    }),
+                    createElement(ScriptEditor, {
+                        scripts: config.scripts,
+                        setScripts: config.setScripts,
+                        blockSlug,
+                    })
+                ),
+
+                // Right: sticky cheat sheet
+                config.cheatSheet && createElement('div', { className: 'gk-cheatsheet' },
+                    createElement('h3', { className: 'gk-cheatsheet__heading' },
+                        createElement('span', { className: 'material-symbols-outlined' }, 'info'),
+                        'Field Cheat Sheet'
+                    ),
+                    createElement('div', {
+                        className: 'gk-cheatsheet__content',
+                        dangerouslySetInnerHTML: { __html: config.cheatSheet },
+                    })
+                )
             ),
 
             // Live preview
@@ -165,11 +171,9 @@ export default function App({ initialConfig, blockSlug }) {
                 fields: config.fields,
             }),
 
-            createElement('hr', { style: styles.divider }),
-
             // General save message (non-AI)
             config.message && !isAiMessage && createElement('div', {
-                style: messageStyle(config.message),
+                className: saveMessageClass(config.message),
             }, config.message)
         );
     }

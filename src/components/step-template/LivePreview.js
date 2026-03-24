@@ -1,7 +1,7 @@
 /**
  * LivePreview — renders processed template HTML with placeholder badges.
  */
-import { createElement } from '@wordpress/element';
+import { createElement, useState } from '@wordpress/element';
 
 // Inline SVG placeholder for image fields.
 const PREVIEW_PLACEHOLDER_SVG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='400' height='300' fill='%23f1f5f9'/%3E%3Cg fill='%2394a3b8'%3E%3Crect x='160' y='100' width='80' height='60' rx='4'/%3E%3Ccircle cx='185' cy='120' r='10'/%3E%3Cpolygon points='160,160 200,120 240,160'/%3E%3C/g%3E%3Ctext x='50%25' y='85%25' dominant-baseline='middle' text-anchor='middle' fill='%2394a3b8' font-size='13' font-family='sans-serif'%3EImage Placeholder%3C/text%3E%3C/svg%3E";
@@ -50,43 +50,64 @@ export function processTemplateForPreview(htmlTemplate, fieldList) {
         // Replace remaining {{key}} tokens with a styled badge
         processed = processed.replace(
             new RegExp('\\{\\{\\s*' + escapedKey + '\\s*\\}\\}', 'g'),
-            '<span style="background:#e0e7ff;color:#3730a3;padding:1px 6px;border-radius:3px;font-size:11px;font-family:monospace;">' + (field.label || field.key) + '</span>'
+            '<span style="background:var(--gk-primary-fixed);color:var(--gk-primary-dark);padding:1px 7px;border-radius:4px;font-size:11px;font-family:var(--gk-font-mono);">' + (field.label || field.key) + '</span>'
         );
     });
 
     return processed;
 }
 
-const styles = {
-    wrapper: { marginTop: '30px' },
-    hint: { fontSize: '12px', color: '#666' },
-    previewBox: {
-        border: '1px solid #ddd',
-        borderRadius: '4px',
-        padding: '20px',
-        minHeight: '200px',
-        backgroundColor: '#fff',
-        position: 'relative',
-        overflow: 'hidden',
-    },
-    emptyHtml: '<p style="color:#aaa;text-align:center;font-style:italic;margin-top:80px;">Preview will appear here...</p>',
-};
+const VIEWPORTS = ['Desktop', 'Tablet', 'Mobile'];
+const VIEWPORT_WIDTHS = { Desktop: '100%', Tablet: '768px', Mobile: '390px' };
 
 export default function LivePreview({ template, css, fields }) {
+    const [viewport, setViewport] = useState('Desktop');
+
     const scopedCss = css ? css.replace(/\.gk-block-wrapper/g, '.gutenkit-live-preview-wrapper') : '';
     const previewHtml = template
         ? processTemplateForPreview(template, fields)
-        : styles.emptyHtml;
+        : null;
 
-    return createElement('div', { style: styles.wrapper },
-        createElement('h3', null, 'Live Preview'),
-        createElement('p', { style: styles.hint }, 'This is a rough preview of the generated HTML and CSS. Mustache tags are not evaluated here.'),
-        createElement('div', { style: styles.previewBox },
+    return createElement('div', { className: 'gk-live-preview' },
+
+        // Header row
+        createElement('div', { className: 'gk-live-preview__header' },
+            createElement('h3', { className: 'gk-live-preview__title' },
+                createElement('span', { className: 'material-symbols-outlined' }, 'preview'),
+                'Live Preview'
+            ),
+            createElement('div', { className: 'gk-viewport-toggle' },
+                VIEWPORTS.map(v =>
+                    createElement('button', {
+                        key: v,
+                        type: 'button',
+                        className: 'gk-viewport-btn' + (viewport === v ? ' is-active' : ''),
+                        onClick: () => setViewport(v),
+                    }, v)
+                )
+            )
+        ),
+
+        // Canvas
+        createElement('div', { className: 'gk-preview-canvas' },
             createElement('style', null, scopedCss),
             createElement('div', {
-                className: 'gutenkit-live-preview-wrapper',
-                dangerouslySetInnerHTML: { __html: previewHtml },
-            })
+                className: 'gk-preview-canvas__inner',
+                style: {
+                    maxWidth: VIEWPORT_WIDTHS[viewport],
+                    margin: '0 auto',
+                    transition: 'max-width 0.25s ease',
+                },
+            },
+                previewHtml
+                    ? createElement('div', {
+                        className: 'gutenkit-live-preview-wrapper',
+                        dangerouslySetInnerHTML: { __html: previewHtml },
+                    })
+                    : createElement('p', { className: 'gk-preview-canvas__empty' },
+                        'Preview will appear here once you add HTML above.'
+                    )
+            )
         )
     );
 }

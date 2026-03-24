@@ -3,29 +3,29 @@
  */
 import { createElement } from '@wordpress/element';
 
-const styles = {
-    textarea: {
-        width: '100%',
-        minHeight: '400px',
-        fontFamily: 'monospace',
-        padding: '12px',
-        fontSize: '13px',
-        border: '1px solid #757575',
-        borderRadius: '4px',
-        whiteSpace: 'pre',
-    },
-    hint: { fontSize: '12px', color: '#666' },
-};
-
 export default function CSSEditor({ css, setCss }) {
-    return createElement('div', { style: { width: '50%' } },
-        createElement('h3', null, 'CSS Styles'),
-        createElement('p', { style: styles.hint }, 'Scoped automatically to the block wrapper.'),
-        createElement('textarea', {
-            value: css,
-            onChange: (e) => setCss(e.target.value),
-            style: styles.textarea,
-            placeholder: '.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}',
-        })
+    return createElement('div', { className: 'gk-editor-card' },
+
+        // Header
+        createElement('div', { className: 'gk-editor-card__header' },
+            createElement('div', { className: 'gk-editor-card__title css-title' },
+                createElement('span', { className: 'material-symbols-outlined' }, 'css'),
+                'CSS Styles'
+            ),
+            createElement('div', { className: 'gk-editor-card__actions' },
+                createElement('span', { className: 'gk-editor-badge' }, 'SCSS ENABLED')
+            )
+        ),
+
+        // Dark textarea body
+        createElement('div', { className: 'gk-editor-card__body' },
+            createElement('textarea', {
+                value: css,
+                onChange: (e) => setCss(e.target.value),
+                className: 'gk-editor-textarea',
+                placeholder: '.bf-block-example {\n  background: #f0f0f0;\n  padding: 20px;\n}',
+                spellCheck: false,
+            })
+        )
     );
 }
