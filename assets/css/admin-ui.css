@@ -1180,6 +1180,56 @@
     font-size: 11px;
 }
 
+/* Script template section inside cheat sheet */
+.gk-cheatsheet__script-section {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--gk-surface-high);
+}
+
+.gk-cheatsheet__script-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--gk-on-surface-variant);
+    margin-bottom: 8px;
+}
+
+.gk-cheatsheet__script-heading .material-symbols-outlined {
+    color: var(--gk-warning, #d97706);
+}
+
+.gk-cheatsheet__script-pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: var(--gk-font-mono);
+    font-size: 11px;
+    line-height: 1.65;
+    padding: 12px;
+    border-radius: var(--gk-radius);
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0;
+    cursor: text;
+    /* click-to-select-all feedback */
+    transition: outline 0.1s;
+}
+
+.gk-cheatsheet__script-pre::selection,
+.gk-cheatsheet__script-pre *::selection {
+    background: rgba(0,88,190,.4);
+    color: #fff;
+}
+
+.gk-cheatsheet__script-pre:focus {
+    outline: 2px solid var(--gk-primary);
+    outline-offset: 1px;
+}
+
 /* AI Generator */
 .gk-ai-hero {
     background: var(--gk-surface-lowest);
