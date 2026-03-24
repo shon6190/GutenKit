@@ -36,23 +36,28 @@ class GutenKit_CheatSheet {
 			$lines[] = "<strong>$label ($key) - $type</strong><br>";
 
 			if ( $type === 'repeater' ) {
-				// Build a single copyable snippet with sub-fields inside the loop
+				// Build a single copyable snippet with sub-fields inside the loop.
+				// Use explicit string concatenation to avoid PHP brace-interpolation quirks.
 				$snippet_lines   = array();
-				$snippet_lines[] = "{{#each $key}}";
+				$snippet_lines[] = '{{#each ' . $key . '}}';
 
 				if ( isset( $field['subFields'] ) && is_array( $field['subFields'] ) ) {
 					foreach ( $field['subFields'] as $sub ) {
-						$sKey  = $sub['key'];
-						$sType = $sub['type'];
+						$sKey  = isset( $sub['key'] ) ? $sub['key'] : '';
+						$sType = isset( $sub['type'] ) ? $sub['type'] : 'text';
+
+						if ( ! $sKey ) {
+							continue; // skip sub-fields with no key
+						}
 
 						if ( $sType === 'gallery' ) {
-							$snippet_lines[] = "  {{#each $sKey}}";
+							$snippet_lines[] = '  {{#each ' . $sKey . '}}';
 							$snippet_lines[] = '    <img src="{{url}}" alt="{{alt}}" />';
 							$snippet_lines[] = '  {{/each}}';
 						} elseif ( $sType === 'image' || $sType === 'file' ) {
-							$snippet_lines[] = "  <img src=\"{{{$sKey}}}\" alt=\"{{{$sKey}_alt}}\" />";
+							$snippet_lines[] = '  <img src="{{' . $sKey . '}}" alt="{{' . $sKey . '_alt}}" />';
 						} else {
-							$snippet_lines[] = "  {{{$sKey}}}";
+							$snippet_lines[] = '  {{' . $sKey . '}}';
 						}
 					}
 				}
@@ -69,10 +74,10 @@ class GutenKit_CheatSheet {
 				$lines[] = "<em>Copy snippet:</em><br>";
 				$lines[] = "<code style='display:block;background:#f6f8fa;padding:4px 8px;margin:4px 0;border-radius:3px;user-select:all;'>$img_snippet</code>";
 				$lines[] = "<small style='color:#555;'>Alt falls back to filename if not set.</small><br>";
-				$lines[] = "<br>URL only: <code>{{{$key}}}</code><br>";
-				$lines[] = "Alt text: <code>{{{$key}_alt}}</code>";
+				$lines[] = '<br>URL only: <code>{{' . $key . '}}</code><br>';
+				$lines[] = 'Alt text: <code>{{' . $key . '_alt}}</code>';
 			} else {
-				$lines[] = "Value: <code>{{{$key}}}</code>";
+				$lines[] = 'Value: <code>{{' . $key . '}}</code>';
 			}
 
 			$lines[] = '</div>';
