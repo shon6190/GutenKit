@@ -56,12 +56,28 @@ class GutenKit_Admin
 			)
 		);
 
+		// Google Fonts — Plus Jakarta Sans, Inter, Fira Code
+		wp_enqueue_style(
+			'gutenkit-google-fonts',
+			'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap',
+			array(),
+			null
+		);
+
+		// Material Symbols Outlined
+		wp_enqueue_style(
+			'gutenkit-material-symbols',
+			'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap',
+			array(),
+			null
+		);
+
 		// New modern UI styles
 		wp_enqueue_style(
 			'gutenkit-admin-ui-css',
 			BLOCK_FACTORY_URL . 'assets/css/admin-ui.css',
-			array(),
-			filemtime(BLOCK_FACTORY_PATH . 'assets/css/admin-ui.css') ? filemtime(BLOCK_FACTORY_PATH . 'assets/css/admin-ui.css') : '1.0'
+			array('gutenkit-google-fonts', 'gutenkit-material-symbols'),
+			filemtime(BLOCK_FACTORY_PATH . 'assets/css/admin-ui.css') ?: '2.0'
 		);
 	}
 
@@ -101,6 +117,13 @@ class GutenKit_Admin
 		$nonce = wp_create_nonce('block_factory_save_structure_action');
 		$script_handle = 'block-factory-editor-app';
 
+		// Pre-generate cheat sheet for existing fields
+		$cheat_sheet_html = '';
+		if ( ! empty( $config['fields'] ) ) {
+			$cheat = new GutenKit_CheatSheet();
+			$cheat_sheet_html = $cheat->generate( $config['fields'] );
+		}
+
 		// Enqueue React Editor
 		$editor_app_path = BLOCK_FACTORY_PATH . 'admin/js/editor-app.js';
 		$editor_app_url = BLOCK_FACTORY_URL . 'admin/js/editor-app.js';
@@ -115,10 +138,11 @@ class GutenKit_Admin
 			);
 
 			wp_localize_script($script_handle, 'blockFactoryEditor', array(
-				'config' => $config,
-				'blockSlug' => $block_slug,
-				'nonce' => $nonce,
-				'ajaxurl' => admin_url('admin-ajax.php'),
+				'config'     => $config,
+				'blockSlug'  => $block_slug,
+				'nonce'      => $nonce,
+				'ajaxurl'    => admin_url('admin-ajax.php'),
+				'cheatSheet' => $cheat_sheet_html,
 			));
 		} else {
 			echo '<div class="notice notice-warning"><p>GutenKit: Admin editor-app.js missing. Run build.</p></div>';
@@ -138,56 +162,82 @@ class GutenKit_Admin
 
 	public function render_dashboard()
 	{
+		$blocks_directory = BLOCKS_BASE_PATH;
+		$block_folders    = glob( $blocks_directory . '*', GLOB_ONLYDIR );
+		$block_count      = is_array( $block_folders ) ? count( $block_folders ) : 0;
 		?>
 		<div class="wrap gutenkit-wrap">
-			<div class="gutenkit-header">
-				<h1>GutenKit Dashboard</h1>
-				<p>Manage your custom Gutenberg blocks easily.</p>
+
+			<!-- Page Hero -->
+			<div class="gk-page-hero">
+				<h1 class="gk-page-hero__title">Manage your blocks.</h1>
+				<p class="gk-page-hero__subtitle">Build, edit, and publish custom Gutenberg blocks — no boilerplate required.</p>
+				<div class="gk-page-hero__meta">
+					<span class="gk-badge gk-badge--primary">
+						<span class="material-symbols-outlined" style="font-size:12px;">widgets</span>
+						<?php echo esc_html( $block_count ); ?> block<?php echo $block_count !== 1 ? 's' : ''; ?>
+					</span>
+					<span class="gk-badge gk-badge--surface">Block Factory</span>
+				</div>
 			</div>
 
 			<div class="gutenkit-dashboard-grid">
+				<!-- Main: Block Cards -->
 				<div class="gutenkit-main-content">
-					<?php
-					$blocks_directory = BLOCKS_BASE_PATH;
-					// Use the same search logic (glob) or just list from blocks dir
-					$block_folders = glob($blocks_directory . '*', GLOB_ONLYDIR);
+					<?php if ( empty( $block_folders ) ) : ?>
+						<div class="gutenkit-empty-state">
+							<span class="material-symbols-outlined" style="font-size:40px;display:block;margin:0 auto 14px;color:var(--gk-outline);">widgets</span>
+							<h3>No blocks yet</h3>
+							<p>Use the form on the right to create your first custom block.</p>
+						</div>
+					<?php else : ?>
+						<p class="gk-section-title">Your Blocks</p>
+						<div class="gutenkit-blocks-grid">
+							<?php foreach ( $block_folders as $block_path ) :
+								$block_slug = basename( $block_path );
+								$block_name = ucwords( str_replace( '-', ' ', $block_slug ) );
+								$edit_url   = admin_url( 'admin.php?page=block-factory&action=edit_structure&block_slug=' . $block_slug );
 
-					if (empty($block_folders)) {
-						echo '<div class="gutenkit-empty-state">';
-						echo '<div class="dashicons dashicons-block-default"></div>';
-						echo '<h3>No Blocks Found</h3>';
-						echo '<p>You haven\'t created any blocks yet. Use the generator form to create your first one!</p>';
-						echo '</div>';
-					} else {
-						echo '<h2>Existing Blocks</h2>';
-						echo '<div class="gutenkit-blocks-grid">';
-
-						foreach ($block_folders as $block_path) {
-							$block_slug = basename($block_path);
-							$block_name = ucwords(str_replace('-', ' ', $block_slug));
-							$edit_url = admin_url('admin.php?page=block-factory&action=edit_structure&block_slug=' . $block_slug);
-
-							echo '<div class="gutenkit-block-card">';
-							echo '<div class="gutenkit-block-card-header">';
-							echo '<span class="dashicons dashicons-layout"></span>';
-							echo '<h3>' . esc_html($block_name) . '</h3>';
-							echo '</div>';
-							echo '<div class="gutenkit-block-card-body">';
-							echo '<code>/' . esc_html($block_slug) . '</code>';
-							echo '</div>';
-							echo '<div class="gutenkit-block-card-actions">';
-							echo '<a href="' . esc_url($edit_url) . '" class="button button-primary">Edit Structure</a>';
-							echo '<button class="button block-factory-delete-btn gutenkit-delete-btn" data-slug="' . esc_attr($block_slug) . '" title="Permanently delete all files for this block."><span class="dashicons dashicons-trash"></span></button>';
-							echo '</div>';
-							echo '</div>'; // End block-card
-						}
-
-						echo '</div>'; // End blocks-grid
-					}
-					?>
+								// Read config to get icon
+								$config_file = $block_path . '/config.json';
+								$block_icon  = 'layout';
+								if ( file_exists( $config_file ) ) {
+									$cfg = json_decode( file_get_contents( $config_file ), true );
+									if ( ! empty( $cfg['icon'] ) ) {
+										$block_icon = esc_attr( $cfg['icon'] );
+									}
+								}
+							?>
+							<div class="gutenkit-block-card">
+								<div class="gutenkit-block-card-header">
+									<div class="gk-card-icon">
+										<span class="dashicons dashicons-<?php echo esc_attr( $block_icon ); ?>"></span>
+									</div>
+									<div class="gk-card-title-group">
+										<h3><?php echo esc_html( $block_name ); ?></h3>
+										<span class="gk-badge gk-badge--success" style="font-size:10px;">Active</span>
+									</div>
+								</div>
+								<div class="gutenkit-block-card-body">
+									<code><?php echo esc_html( $block_slug ); ?></code>
+								</div>
+								<div class="gutenkit-block-card-actions">
+									<a href="<?php echo esc_url( $edit_url ); ?>" class="button button-primary">Edit Structure</a>
+									<button
+										class="button block-factory-delete-btn gutenkit-delete-btn"
+										data-slug="<?php echo esc_attr( $block_slug ); ?>"
+										title="Permanently delete all files for this block."
+									><span class="dashicons dashicons-trash"></span></button>
+								</div>
+							</div>
+							<?php endforeach; ?>
+						</div>
+					<?php endif; ?>
 				</div>
+
+				<!-- Sidebar: Create Form -->
 				<div class="gutenkit-sidebar">
-					<?php include(BLOCK_FACTORY_PATH . 'admin/generator-form.php'); ?>
+					<?php include( BLOCK_FACTORY_PATH . 'admin/generator-form.php' ); ?>
 				</div>
 			</div>
 		</div>

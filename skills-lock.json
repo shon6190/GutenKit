@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "ui-development": {
+      "source": "redpanda-data/console",
+      "sourceType": "github",
+      "computedHash": "03ecf50821fd5afa9c3d28659cea92515204b356e341166ef39ce4714adc3106"
+    }
+  }
+}

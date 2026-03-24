@@ -37,8 +37,12 @@ class GutenKit_Loader
 
 	private function includes()
 	{
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-node-environment.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-register.php';
-		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-generator.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-cheat-sheet.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-config-manager.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-block-creator.php';
+		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-block-builder.php';
 		require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-ai.php';
 
 		if (is_admin()) {
@@ -51,8 +55,20 @@ class GutenKit_Loader
 		// Instantiate Registration
 		$registrar = new GutenKit_Register();
 
-		// Instantiate Generator (AJAX handlers)
-		$generator = new GutenKit_Generator();
+		// Node environment (shared dependency)
+		$this->node_env = new GutenKit_NodeEnvironment();
+		$this->node_env->detect();
+
+		// Instantiate ConfigManager + CheatSheet (owns save-structure endpoint)
+		$cheat_sheet    = new GutenKit_CheatSheet();
+		$config_manager = new GutenKit_ConfigManager();
+		$config_manager->set_cheat_sheet( $cheat_sheet );
+
+		// Instantiate BlockCreator (create / delete block endpoints)
+		$block_creator = new GutenKit_BlockCreator();
+
+		// Instantiate BlockBuilder (npm build / install endpoints)
+		$block_builder = new GutenKit_BlockBuilder( $this->node_env );
 
 		// Instantiate AI Module
 		$ai = new GutenKit_AI();
@@ -68,6 +84,12 @@ class GutenKit_Loader
 		// Define constants if not already defined (might not be if called early)
 		if (!defined('BLOCK_FACTORY_PATH')) {
 			define('BLOCK_FACTORY_PATH', plugin_dir_path(dirname(__FILE__)));
+		}
+
+		// Ensure NodeEnvironment class is available when activate() is called statically
+		// (e.g. via register_activation_hook, before the constructor runs includes())
+		if ( ! class_exists( 'GutenKit_NodeEnvironment' ) ) {
+			require_once BLOCK_FACTORY_PATH . 'includes/class-gutenkit-node-environment.php';
 		}
 
 		$node_modules = BLOCK_FACTORY_PATH . 'node_modules';
@@ -99,7 +121,8 @@ class GutenKit_Loader
 
 	private static function install_dependencies()
 	{
-		$node_env = self::detect_node_environment();
+		$node_environment = new GutenKit_NodeEnvironment();
+		$node_env = $node_environment->detect();
 		$npm_cmd = $node_env['npm_cmd'];
 		$node_dir = $node_env['node_dir'];
 
@@ -133,57 +156,4 @@ class GutenKit_Loader
 		}
 	}
 
-	private static function detect_node_environment()
-	{
-		$node_path = '';
-		$npm_cmd = 'npm'; // Default
-
-		// 1. Check for constant override
-		if (defined('WP_BLOCK_FACTORY_NODE_PATH')) {
-			$node_path = WP_BLOCK_FACTORY_NODE_PATH;
-		}
-
-		// 2. Attempt to find node using 'where' (Windows) or 'which' (Linux/Mac)
-		if (empty($node_path)) {
-			$cmd = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') ? 'where node' : 'which node';
-			exec($cmd, $output, $return_var);
-			if ($return_var === 0 && !empty($output)) {
-				$node_executable = $output[0];
-				$node_path = dirname($node_executable);
-			}
-		}
-
-		// 3. Common fallback paths
-		if (empty($node_path)) {
-			$common_paths = [
-				'/usr/local/bin',
-				'/usr/bin',
-				'/opt/homebrew/bin',
-				'C:\\Program Files\\nodejs',
-				'C:\\Program Files (x86)\\nodejs'
-			];
-			foreach ($common_paths as $path) {
-				$check_file = $path . ((strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') ? '\\node.exe' : '/node');
-				if (file_exists($check_file)) {
-					$node_path = $path;
-					break;
-				}
-			}
-		}
-
-		// Determine npm command based on node path
-		if (!empty($node_path)) {
-			// Check if we are on Windows
-			if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-				$npm_cmd = '"' . $node_path . '\\npm.cmd"';
-			} else {
-				$npm_cmd = '"' . $node_path . '/npm"';
-			}
-		}
-
-		return [
-			'node_dir' => $node_path,
-			'npm_cmd' => $npm_cmd
-		];
-	}
 }
