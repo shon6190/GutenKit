@@ -27,6 +27,102 @@ function Icon({ name, style }) {
     }, name);
 }
 
+// ── Script HTML templates (copy-ready snippets shown in the cheat sheet) ─────
+
+const SCRIPT_HTML_TEMPLATES = {
+    slider: {
+        label: 'Slider — required data-embla-* structure',
+        icon: 'view_carousel',
+        code:
+`<div class="gk-block-wrapper">
+
+  <!-- Viewport: needs overflow:hidden in CSS -->
+  <div class="my-viewport" data-embla-viewport>
+
+    <!-- Track: needs display:flex in CSS -->
+    <div class="my-track">
+      {{#each slides}}
+        <div class="my-slide">
+          <!-- slide content here -->
+        </div>
+      {{/each}}
+    </div>
+
+  </div>
+
+  <!-- Optional prev/next buttons -->
+  <button data-embla-prev>Prev</button>
+  <button data-embla-next>Next</button>
+
+  <!-- Optional dot navigation -->
+  <div data-embla-dots>
+    <button data-embla-dot></button>
+  </div>
+
+</div>`,
+    },
+
+    accordion: {
+        label: 'Accordion — trigger + panel structure',
+        icon: 'expand',
+        code:
+`{{#each items}}
+<div class="accordion-item">
+
+  <!-- Button class must contain "accordion-trigger" -->
+  <button class="accordion-trigger" aria-expanded="false">
+    {{title}}
+  </button>
+
+  <!-- Panel must be the immediate next sibling -->
+  <div class="accordion-panel" style="max-height:0;overflow:hidden;">
+    {{content}}
+  </div>
+
+</div>
+{{/each}}`,
+    },
+
+    ajax: {
+        label: 'AJAX — trigger + container structure',
+        icon: 'cloud_sync',
+        code:
+`<!-- Results are rendered into this container -->
+<div data-ajax-container>
+  {{#each items}}
+    <div class="result-item">{{title}}</div>
+  {{/each}}
+</div>
+
+<!-- Trigger button — data-* attrs are sent as the request body -->
+<button data-ajax-trigger data-page="1">
+  Load More
+</button>`,
+    },
+};
+
+function ScriptCheatSection({ scripts }) {
+    if (!scripts || !scripts.type || !SCRIPT_HTML_TEMPLATES[scripts.type]) return null;
+    const tpl = SCRIPT_HTML_TEMPLATES[scripts.type];
+    return createElement('div', { className: 'gk-cheatsheet__script-section' },
+        createElement('div', { className: 'gk-cheatsheet__script-heading' },
+            createElement('span', { className: 'material-symbols-outlined', style: { fontSize: '15px' } }, tpl.icon),
+            tpl.label
+        ),
+        createElement('pre', {
+            className: 'gk-cheatsheet__script-pre',
+            title: 'Click to select all',
+            onClick: (e) => {
+                const range = document.createRange();
+                range.selectNodeContents(e.currentTarget);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            },
+        }, tpl.code)
+    );
+}
+
 function saveMessageClass(msg) {
     const isSuccess = msg.includes('Saved') || msg.includes('Complete') || msg.includes('ready');
     return 'gk-save-message ' + (isSuccess ? 'is-success' : 'is-error');
@@ -151,16 +247,18 @@ export default function App({ initialConfig, blockSlug }) {
                     })
                 ),
 
-                // Right: sticky cheat sheet
-                config.cheatSheet && createElement('div', { className: 'gk-cheatsheet' },
+                // Right: sticky cheat sheet (fields + script template)
+                (config.cheatSheet || (config.scripts && config.scripts.type && SCRIPT_HTML_TEMPLATES[config.scripts.type])) &&
+                createElement('div', { className: 'gk-cheatsheet' },
                     createElement('h3', { className: 'gk-cheatsheet__heading' },
                         createElement('span', { className: 'material-symbols-outlined' }, 'info'),
-                        'Field Cheat Sheet'
+                        'Cheat Sheet'
                     ),
-                    createElement('div', {
+                    config.cheatSheet && createElement('div', {
                         className: 'gk-cheatsheet__content',
                         dangerouslySetInnerHTML: { __html: config.cheatSheet },
-                    })
+                    }),
+                    createElement(ScriptCheatSection, { scripts: config.scripts })
                 )
             ),
 
@@ -169,6 +267,7 @@ export default function App({ initialConfig, blockSlug }) {
                 template: config.template,
                 css: config.css,
                 fields: config.fields,
+                scripts: config.scripts,
             }),
 
             // General save message (non-AI)
