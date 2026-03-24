@@ -17,10 +17,8 @@ const Edit = ( { attributes, setAttributes } ) => {
 
 	return (
         <div { ...blockProps }>
-            {/* 1. SIDEBAR: Settings controls go here */}
-            <InspectorControls>
-                // __INJECT_UI_CODE__
-            </InspectorControls>
+            {/* 1. SIDEBAR: Each field renders its own <InspectorControls> */}
+            // __INJECT_UI_CODE__
 
             {/* 2. CANVAS: Real-time HTML preview goes here */}
             <div className="bf-block-canvas-preview" ref={ canvasRef }>
