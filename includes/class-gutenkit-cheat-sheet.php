@@ -36,37 +36,34 @@ class GutenKit_CheatSheet {
 			$lines[] = "<strong>$label ($key) - $type</strong><br>";
 
 			if ( $type === 'repeater' ) {
-				$lines[] = '<em>Loop:</em><br>';
-				$lines[] = "<code>{{#each $key}}</code><br>";
+				// Build a single copyable snippet with sub-fields inside the loop
+				$snippet_lines   = array();
+				$snippet_lines[] = "{{#each $key}}";
 
-				if ( isset( $field['subFields'] ) ) {
+				if ( isset( $field['subFields'] ) && is_array( $field['subFields'] ) ) {
 					foreach ( $field['subFields'] as $sub ) {
 						$sKey  = $sub['key'];
 						$sType = $sub['type'];
 
 						if ( $sType === 'gallery' ) {
-							$lines[] = '&nbsp;&nbsp; <em>Gallery Loop:</em><br>';
-							$lines[] = "&nbsp;&nbsp; <code>{{#each $sKey}}</code><br>";
-							$lines[] = "&nbsp;&nbsp;&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
-							$lines[] = "&nbsp;&nbsp; <code>{{/each}}</code><br>";
+							$snippet_lines[] = "  {{#each $sKey}}";
+							$snippet_lines[] = '    <img src="{{url}}" alt="{{alt}}" />';
+							$snippet_lines[] = '  {{/each}}';
+						} elseif ( $sType === 'image' || $sType === 'file' ) {
+							$snippet_lines[] = "  <img src=\"{{{$sKey}}}\" alt=\"{{{$sKey}_alt}}\" />";
 						} else {
-							if ( $sType === 'image' || $sType === 'file' ) {
-								$sub_img = htmlspecialchars( '<img src="{{' . $sKey . '}}" alt="{{' . $sKey . '_alt}}" />' );
-								$lines[] = "&nbsp;&nbsp; <code style='display:inline-block;background:#f6f8fa;padding:2px 6px;border-radius:3px;user-select:all;'>$sub_img</code> <small>($sType)</small><br>";
-								$lines[] = "&nbsp;&nbsp; Alt: <code>{{{$sKey}_alt}}</code> <small>(falls back to filename)</small><br>";
-							} else {
-								$lines[] = "&nbsp;&nbsp; <code>{{{$sKey}}}</code> <small>($sType)</small><br>";
-							}
+							$snippet_lines[] = "  {{{$sKey}}}";
 						}
 					}
 				}
 
-				$lines[] = '<code>{{/each}}</code>';
+				$snippet_lines[] = '{{/each}}';
+
+				$snippet = htmlspecialchars( implode( "\n", $snippet_lines ) );
+				$lines[] = '<pre style="background:#f6f8fa;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin:6px 0 0;font-size:12px;line-height:1.6;white-space:pre;overflow-x:auto;cursor:pointer;user-select:all;" title="Click to select all" onclick="var r=document.createRange();r.selectNodeContents(this);var s=window.getSelection();s.removeAllRanges();s.addRange(r);">' . $snippet . '</pre>';
 			} elseif ( $type === 'gallery' ) {
-				$lines[] = '<em>Loop (Gallery):</em><br>';
-				$lines[] = "<code>{{#each $key}}</code><br>";
-				$lines[] = "&nbsp;&nbsp; &lt;img src=\"{{url}}\" alt=\"{{alt}}\" /&gt;<br>";
-				$lines[] = '<code>{{/each}}</code>';
+				$gallery_snippet = htmlspecialchars( "{{#each $key}}\n  <img src=\"{{url}}\" alt=\"{{alt}}\" />\n{{/each}}" );
+				$lines[] = '<pre style="background:#f6f8fa;border:1px solid #e2e8f0;border-radius:6px;padding:10px 12px;margin:6px 0 0;font-size:12px;line-height:1.6;white-space:pre;overflow-x:auto;cursor:pointer;user-select:all;" title="Click to select all" onclick="var r=document.createRange();r.selectNodeContents(this);var s=window.getSelection();s.removeAllRanges();s.addRange(r);">' . $gallery_snippet . '</pre>';
 			} elseif ( $type === 'image' || $type === 'file' ) {
 				$img_snippet = htmlspecialchars( '<img src="{{' . $key . '}}" alt="{{' . $key . '_alt}}" />' );
 				$lines[] = "<em>Copy snippet:</em><br>";
