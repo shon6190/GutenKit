@@ -24,12 +24,37 @@ function getSnippet(field) {
         const body = inner.length ? '\n' + inner.join('\n') + '\n' : '\n  \n';
         return '{{#each ' + field.key + '}}' + body + '{{/each}}';
     }
+    if (field.type === 'email')     return '{{' + field.key + '}}';
+    if (field.type === 'toggle')    return '{{' + field.key + '}}';
+    if (field.type === 'gradient')  return '{{' + field.key + '}}';
+    if (field.type === 'select' || field.type === 'radio') return '{{' + field.key + '}}';
+    if (field.type === 'multiselect') return '{{' + field.key + '}}';
+    if (field.type === 'link') {
+        return '<a href="{{' + field.key + '_url}}" target="{{' + field.key + '_target}}">\n  {{' + field.key + '_title}}\n</a>';
+    }
+    if (field.type === 'spacing') {
+        return 'style="padding: {{' + field.key + '}}"';
+    }
+    if (field.type === 'dimension') {
+        return 'style="width: {{' + field.key + '_width}}; height: {{' + field.key + '_height}}"';
+    }
+    if (field.type === 'typography') {
+        return 'style="{{' + field.key + '}}"';
+    }
     return '{{' + field.key + '}}';
 }
 
 function chipLabel(field) {
     if (field.type === 'image' || field.type === 'file')       return field.key + ' [img]';
     if (field.type === 'repeater' || field.type === 'gallery') return field.key + ' [loop]';
+    if (field.type === 'toggle')                               return field.key + ' [bool]';
+    if (field.type === 'gradient')                             return field.key + ' [gradient]';
+    if (field.type === 'select' || field.type === 'radio')     return field.key + ' [select]';
+    if (field.type === 'multiselect')                          return field.key + ' [multi]';
+    if (field.type === 'link')                                 return field.key + ' [link]';
+    if (field.type === 'spacing')                              return field.key + ' [spacing]';
+    if (field.type === 'dimension')                            return field.key + ' [dimension]';
+    if (field.type === 'typography')                           return field.key + ' [typography]';
     return field.key;
 }
 

@@ -44,6 +44,16 @@ function sampleValue(field, index = 0) {
         case 'color':         return pick(SAMPLE_COLORS, index);
         case 'icon':          return '★';
         case 'relational':    return pick(SAMPLE_NAMES, index);
+        case 'email':       return 'hello@example.com';
+        case 'toggle':      return 'true';
+        case 'gradient':    return 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+        case 'select':
+        case 'radio':       return (field.options && field.options[0]) ? field.options[0].value : 'option_1';
+        case 'multiselect': return (field.options && field.options[0]) ? field.options[0].value : 'option_1';
+        case 'link':        return '#';
+        case 'spacing':     return '16px 24px 16px 24px';
+        case 'dimension':   return '100%';
+        case 'typography':  return 'font-family:Inter,sans-serif;font-size:16px;font-weight:400;line-height:1.5';
         default:              return pick(SAMPLE_TITLES, index);
     }
 }
@@ -62,6 +72,39 @@ function replaceField(html, field, index) {
     if (field.type === 'button') {
         html = html.replace(new RegExp('\\{\\{\\s*' + esc + '\\s*\\}\\}', 'g'),
             '<a href="#" class="bf-preview-btn">' + (field.label || 'Button') + '</a>');
+        return html;
+    }
+    if (field.type === 'link') {
+        const url   = '#';
+        const title = field.label || 'Learn More';
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_url\\s*\\}\\}', 'g'), url);
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_title\\s*\\}\\}', 'g'), title);
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_target\\s*\\}\\}', 'g'), '_self');
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '\\s*\\}\\}', 'g'),
+            '<a href="' + url + '">' + title + '</a>');
+        return html;
+    }
+    if (field.type === 'spacing') {
+        ['top','right','bottom','left','unit'].forEach((p, i) => {
+            const val = p === 'unit' ? 'px' : (16 + i * 4) + 'px';
+            html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_' + p + '\\s*\\}\\}', 'g'), val);
+        });
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '\\s*\\}\\}', 'g'), '16px 24px 16px 24px');
+        return html;
+    }
+    if (field.type === 'dimension') {
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_width\\s*\\}\\}', 'g'), '320px');
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_height\\s*\\}\\}', 'g'), '240px');
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_unit\\s*\\}\\}', 'g'), 'px');
+        return html;
+    }
+    if (field.type === 'typography') {
+        const typoVals = { family: 'Inter, sans-serif', size: '16px', weight: '400', lineHeight: '1.5' };
+        ['family','size','weight','lineHeight'].forEach(p => {
+            html = html.replace(new RegExp('\\{\\{\\s*' + esc + '_' + p + '\\s*\\}\\}', 'g'), typoVals[p]);
+        });
+        html = html.replace(new RegExp('\\{\\{\\s*' + esc + '\\s*\\}\\}', 'g'),
+            'font-family:Inter,sans-serif;font-size:16px;font-weight:400;line-height:1.5');
         return html;
     }
     html = html.replace(new RegExp('\\{\\{\\s*' + esc + '\\s*\\}\\}', 'g'),

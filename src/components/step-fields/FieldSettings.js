@@ -5,6 +5,7 @@ import { createElement } from '@wordpress/element';
 import { Button, TextControl, SelectControl } from '@wordpress/components';
 import { FIELD_TYPES } from './fieldTypes.js';
 import RepeaterSettings from './RepeaterSettings.js';
+import OptionsEditor from './OptionsEditor.js';
 
 const styles = {
     errorBox: {
@@ -39,11 +40,18 @@ export default function FieldSettings({
 
     const index = fields.indexOf(selectedField);
 
+    const COMPLEX_FIELD_TYPES = ['image', 'file', 'gallery', 'repeater', 'button', 'link', 'spacing', 'dimension', 'typography', 'toggle', 'multiselect'];
+
     const handleTypeChange = (val) => {
-        const objTypes   = ['image', 'file'];
-        const arrayTypes = ['gallery', 'repeater'];
+        const objTypes   = COMPLEX_FIELD_TYPES.filter(t => ['image', 'file'].includes(t));
+        const arrayTypes = COMPLEX_FIELD_TYPES.filter(t => ['gallery', 'repeater', 'multiselect'].includes(t));
         let newDefault = '';
-        if (val === 'button')              newDefault = { text: '', url: '' };
+        if (val === 'button')          newDefault = { text: '', url: '' };
+        else if (val === 'link')       newDefault = { url: '', title: '', target: '_self' };
+        else if (val === 'spacing')    newDefault = { top: '0px', right: '0px', bottom: '0px', left: '0px' };
+        else if (val === 'dimension')  newDefault = { width: '', height: '' };
+        else if (val === 'typography') newDefault = { family: '', size: '', weight: '400', lineHeight: '1.5' };
+        else if (val === 'toggle')     newDefault = false;
         else if (objTypes.includes(val))   newDefault = null;
         else if (arrayTypes.includes(val)) newDefault = [];
         const newFields = fields.map((f, i) => i === index ? { ...f, type: val, default: newDefault } : f);
@@ -76,7 +84,7 @@ export default function FieldSettings({
             }),
 
             // Default value — hide for object/array types
-            !['image', 'file', 'gallery', 'repeater', 'button'].includes(selectedField.type) &&
+            !COMPLEX_FIELD_TYPES.includes(selectedField.type) &&
                 createElement(TextControl, {
                     label: 'Default Value (Optional)',
                     value: selectedField.default || '',
@@ -107,6 +115,13 @@ export default function FieldSettings({
                 style: { marginTop: '10px' },
             }, 'Delete Field')
         ),
+
+        // Options editor for select / radio / multiselect
+        ['select', 'radio', 'multiselect'].includes(selectedField.type) &&
+            createElement(OptionsEditor, {
+                options: selectedField.options || [],
+                onChange: (opts) => updateField(index, 'options', opts),
+            }),
 
         // Repeater sub-fields
         selectedField.type === 'repeater' && createElement(RepeaterSettings, {

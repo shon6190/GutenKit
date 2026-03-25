@@ -76,6 +76,42 @@ class GutenKit_CheatSheet {
 				$lines[] = "<small style='color:#555;'>Alt falls back to filename if not set.</small><br>";
 				$lines[] = '<br>URL only: <code>{{' . $key . '}}</code><br>';
 				$lines[] = 'Alt text: <code>{{' . $key . '_alt}}</code>';
+			} elseif ( $type === 'toggle' ) {
+				$lines[] = 'Value: <code>{{' . $key . '}}</code> <small>(outputs &quot;true&quot; or &quot;false&quot;)</small>';
+				$lines[] = '<br><small>Tip: use in a class attribute: <code>class=&quot;block {{' . $key . '}}&quot;</code></small>';
+			} elseif ( $type === 'email' ) {
+				$lines[] = 'Value: <code>{{' . $key . '}}</code>';
+			} elseif ( $type === 'gradient' ) {
+				$lines[] = 'CSS gradient value: <code>{{' . $key . '}}</code>';
+				$lines[] = '<br><small>Example: <code>style=&quot;background: {{' . $key . '}}&quot;</code></small>';
+			} elseif ( $type === 'select' || $type === 'radio' ) {
+				$lines[] = 'Selected value: <code>{{' . $key . '}}</code>';
+			} elseif ( $type === 'multiselect' ) {
+				$lines[] = 'Comma-separated values: <code>{{' . $key . '}}</code>';
+			} elseif ( $type === 'link' ) {
+				$lines[] = 'Full anchor: <code>{{' . $key . '}}</code><br>';
+				$lines[] = 'Or individual tokens:<br>';
+				$lines[] = '&nbsp;&nbsp; URL: <code>{{' . $key . '_url}}</code><br>';
+				$lines[] = '&nbsp;&nbsp; Title: <code>{{' . $key . '_title}}</code><br>';
+				$lines[] = '&nbsp;&nbsp; Target: <code>{{' . $key . '_target}}</code>';
+			} elseif ( $type === 'spacing' ) {
+				$lines[] = 'Shorthand (T R B L): <code>{{' . $key . '}}</code><br>';
+				$lines[] = 'Individual sides:<br>';
+				foreach ( array( 'top', 'right', 'bottom', 'left' ) as $side ) {
+					$lines[] = '&nbsp;&nbsp; <code>{{' . $key . '_' . $side . '}}</code><br>';
+				}
+				$lines[] = '<small>Example: <code>style=&quot;padding: {{' . $key . '}}&quot;</code></small>';
+			} elseif ( $type === 'dimension' ) {
+				$lines[] = 'Width: <code>{{' . $key . '_width}}</code><br>';
+				$lines[] = 'Height: <code>{{' . $key . '_height}}</code><br>';
+				$lines[] = '<small>Example: <code>style=&quot;width:{{' . $key . '_width}};height:{{' . $key . '_height}}&quot;</code></small>';
+			} elseif ( $type === 'typography' ) {
+				$lines[] = 'Inline CSS string: <code>{{' . $key . '}}</code><br>';
+				$lines[] = 'Individual properties:<br>';
+				foreach ( array( 'family', 'size', 'weight', 'lineHeight' ) as $prop ) {
+					$lines[] = '&nbsp;&nbsp; <code>{{' . $key . '_' . $prop . '}}</code><br>';
+				}
+				$lines[] = '<small>Example: <code>style=&quot;{{' . $key . '}}&quot;</code></small>';
 			} else {
 				$lines[] = 'Value: <code>{{' . $key . '}}</code>';
 			}
