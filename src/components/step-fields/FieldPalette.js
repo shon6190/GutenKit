@@ -10,8 +10,13 @@ const FIELD_ICONS = {
     number:        'pin',
     range:         'tune',
     url:           'link',
+    email:         'email',
     textarea:      'notes',
     contentEditor: 'article',
+    toggle:        'toggle_on',
+    select:        'arrow_drop_down_circle',
+    radio:         'radio_button_checked',
+    multiselect:   'checklist',
     image:         'image',
     file:          'attach_file',
     gallery:       'collections',
@@ -19,13 +24,18 @@ const FIELD_ICONS = {
     datetime:      'schedule',
     time:          'schedule',
     color:         'palette',
+    gradient:      'gradient',
     icon:          'emoji_emotions',
+    button:        'smart_button',
+    link:          'add_link',
+    spacing:       'padding',
+    dimension:     'aspect_ratio',
+    typography:    'title',
     repeater:      'repeat',
     relational:    'account_tree',
-    button:        'smart_button',
 };
 
-const INSPECTOR_TYPES = ['text', 'number', 'range', 'url', 'color', 'date', 'datetime', 'time', 'icon', 'relational', 'button'];
+const INSPECTOR_TYPES = ['text', 'number', 'range', 'url', 'email', 'color', 'gradient', 'date', 'datetime', 'time', 'icon', 'toggle', 'select', 'radio', 'multiselect', 'button', 'link', 'spacing', 'dimension', 'typography', 'relational'];
 const CONTENT_TYPES   = ['textarea', 'contentEditor', 'image', 'file', 'gallery', 'repeater'];
 
 function renderGroup(types, addField) {
