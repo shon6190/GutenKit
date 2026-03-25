@@ -99,8 +99,39 @@ function generateRenderPhp(blockPath, blockSlug, config) {
         const key = field.key;
         const type = field.type;
 
-        // Skip repeater/gallery — already handled by loop processing
-        if (type === 'repeater' || type === 'gallery') continue;
+        // Compound token replacement for object types
+        if (type === 'link') {
+            template = template.split(`{{${key}_url}}`).join(`<?php echo esc_url( $attributes['${key}']['url'] ?? '' ); ?>`);
+            template = template.split(`{{${key}_title}}`).join(`<?php echo esc_html( $attributes['${key}']['title'] ?? '' ); ?>`);
+            template = template.split(`{{${key}_target}}`).join(`<?php echo esc_attr( $attributes['${key}']['target'] ?? '_self' ); ?>`);
+            // {{key}} shorthand = full anchor tag
+            const linkPhp = `<?php if ( ! empty( $attributes['${key}']['url'] ) ): ?>`
+                + `<a href="<?php echo esc_url( $attributes['${key}']['url'] ); ?>"`
+                + ` target="<?php echo esc_attr( $attributes['${key}']['target'] ?? '_self' ); ?>">`
+                + `<?php echo esc_html( $attributes['${key}']['title'] ?? '' ); ?>`
+                + `</a><?php endif; ?>`;
+            template = template.split(`{{${key}}}`).join(linkPhp);
+        } else if (type === 'spacing') {
+            ['top', 'right', 'bottom', 'left', 'unit'].forEach(prop => {
+                template = template.split(`{{${key}_${prop}}}`).join(`<?php echo esc_attr( $attributes['${key}']['${prop}'] ?? '0' ); ?>`);
+            });
+            const spacingPhp = `<?php echo esc_attr( ($attributes['${key}']['top'] ?? '0') . ' ' . ($attributes['${key}']['right'] ?? '0') . ' ' . ($attributes['${key}']['bottom'] ?? '0') . ' ' . ($attributes['${key}']['left'] ?? '0') ); ?>`;
+            template = template.split(`{{${key}}}`).join(spacingPhp);
+        } else if (type === 'dimension') {
+            ['width', 'height', 'unit'].forEach(prop => {
+                template = template.split(`{{${key}_${prop}}}`).join(`<?php echo esc_attr( $attributes['${key}']['${prop}'] ?? '' ); ?>`);
+            });
+            // {{key}} alone has no meaningful single output for dimension — leave unreplaced (will be stripped by final cleanup)
+        } else if (type === 'typography') {
+            ['family', 'size', 'weight', 'lineHeight'].forEach(prop => {
+                template = template.split(`{{${key}_${prop}}}`).join(`<?php echo esc_attr( $attributes['${key}']['${prop}'] ?? '' ); ?>`);
+            });
+            const typographyPhp = `<?php echo esc_attr( 'font-family:' . ($attributes['${key}']['family'] ?? '') . ';font-size:' . ($attributes['${key}']['size'] ?? '') . ';font-weight:' . ($attributes['${key}']['weight'] ?? '400') . ';line-height:' . ($attributes['${key}']['lineHeight'] ?? '1.5') ); ?>`;
+            template = template.split(`{{${key}}}`).join(typographyPhp);
+        }
+
+        // Skip repeater/gallery/object types — already handled by loop processing or compound token block above
+        if (['repeater', 'gallery', 'link', 'spacing', 'dimension', 'typography'].includes(type)) continue;
 
         let php = '';
         switch (type) {
@@ -131,6 +162,22 @@ function generateRenderPhp(blockPath, blockSlug, config) {
                     + `<a href="<?php echo esc_url( $attributes['${key}']['url'] ); ?>" class="gk-btn">`
                     + `<?php echo esc_html( $attributes['${key}']['text'] ?? 'Click Here' ); ?>`
                     + `</a><?php endif; ?>`;
+                break;
+            case 'email':
+                php = `<?php echo esc_attr( $attributes['${key}'] ?? '' ); ?>`;
+                break;
+            case 'toggle':
+                php = `<?php echo ! empty( $attributes['${key}'] ) ? 'true' : 'false'; ?>`;
+                break;
+            case 'gradient':
+                php = `<?php echo esc_attr( $attributes['${key}'] ?? '' ); ?>`;
+                break;
+            case 'select':
+            case 'radio':
+                php = `<?php echo esc_html( $attributes['${key}'] ?? '' ); ?>`;
+                break;
+            case 'multiselect':
+                php = `<?php echo esc_html( implode( ', ', is_array( $attributes['${key}'] ?? [] ) ? $attributes['${key}'] : [] ) ); ?>`;
                 break;
             default:
                 // text, textarea, contentEditor — safe check for array
@@ -598,7 +645,7 @@ function generateBlock(blockPath) {
             }
 
             // Generate field JSX
-            let fieldJSX = map.jsx(field.key, field.label);
+            let fieldJSX = map.jsx(field.key, field.label, field);
 
             // Handle Repeater
             if (field.type === 'repeater') {
